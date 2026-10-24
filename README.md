@@ -29,7 +29,9 @@ Probelni yonga surişş — tilni almaştiradi; glob tugmasini uzoq bosiş — t
 
 ## Xavfsizlik
 
-- `AndroidManifest.xml`'da **hec qanday** `uses-permission` yöq (INTERNET ham).
+- `AndroidManifest.xml`'da **hec qanday** `uses-permission` yöq (INTERNET ham). Tayyor APK'da faqat
+  androidx qö'shadigan ichki `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` çiqadi: u ilovaning özi uçun,
+  foydalanuvchidan hec narsa so'ramaydi va tarmoqqa aloqasi yöq.
   CI har yig'işda `aapt2 dump permissions` bilan tekşiradi va INTERNET çiqsa to'xtaydi.
 - `allowBackup=false`; sozlamalar faqat ilovaning özida (SharedPreferences).
 

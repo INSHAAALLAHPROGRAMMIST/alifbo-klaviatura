@@ -104,8 +104,8 @@ class OverlayView(context: Context) : View(context) {
     private fun drawPreview(canvas: Canvas, key: RectF) {
         if (prevText.isEmpty()) return
         val corner = max(prevCorner, dp(6f))
-        val bw = min(max(key.width() * 1.45f, dp(54f)), width - dp(4f))
-        val bh = min(prevKeyH * 1.08f, max(dp(30f), key.top - dp(1f)))
+        val bw = min(max(key.width() * 1.65f, dp(58f)), width - dp(4f))
+        val bh = min(prevKeyH * 1.12f, max(dp(30f), key.top - dp(1f)))
         val left = (key.centerX() - bw / 2f).coerceIn(dp(2f), max(dp(2f), width - bw - dp(2f)))
         val top = max(dp(1f), key.top - bh)
         val head = RectF(left, top, left + bw, key.top + dp(2f))

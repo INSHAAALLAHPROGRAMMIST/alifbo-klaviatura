@@ -121,19 +121,20 @@ object Layouts {
     }
 
     private fun bottom(lang: Lang?, total: Float, modeKind: Kind, modeLabel: String): List<Key> {
+        // probel imkon qadar keng bo'lsin: qolgan tugmalar ixcham
         val keys = buildList {
-            add(Key(modeKind, modeLabel, 1.3f))
-            add(Key(Kind.LANGUAGE, "", 1f))
-            add(Key(Kind.EMOJI, "", 1f))
-            add(Key(Kind.CHAR, ",", 0.9f))
+            add(Key(modeKind, modeLabel, 1.2f))
+            add(Key(Kind.LANGUAGE, "", 0.9f))
+            add(Key(Kind.EMOJI, "", 0.9f))
+            add(Key(Kind.CHAR, ",", 0.8f))
             add(Key(Kind.SPACE, "", 1f))
             when (lang) {
-                Lang.UZ -> add(Key(Kind.CHAR, TUTUQ, 0.9f, listOf("'", RSQUO, OKINA)))
-                Lang.EN -> add(Key(Kind.CHAR, "'", 0.9f, listOf(RSQUO)))
+                Lang.UZ -> add(Key(Kind.CHAR, TUTUQ, 0.8f, listOf("'", RSQUO, OKINA)))
+                Lang.EN -> add(Key(Kind.CHAR, "'", 0.8f, listOf(RSQUO)))
                 else -> {}
             }
-            add(Key(Kind.CHAR, ".", 0.9f, dotPopup))
-            add(Key(Kind.ENTER, "", 1.4f))
+            add(Key(Kind.CHAR, ".", 0.8f, dotPopup))
+            add(Key(Kind.ENTER, "", 1.3f))
         }
         return scaleAndFit(keys, total)
     }

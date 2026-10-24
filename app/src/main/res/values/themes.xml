@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Alifbo" parent="@android:style/Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Alifbo" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- ulagich, surgich, belgilash katakchasi va matn maydoni ilovaning ko'k rangida -->
+        <item name="android:colorAccent">@color/alifbo_accent</item>
+        <item name="android:colorControlActivated">@color/alifbo_accent</item>
+        <item name="android:colorPrimary">@color/alifbo_accent</item>
+    </style>
+    <color name="alifbo_accent">#2F6FED</color>
     <color name="ic_background">#2F6FED</color>
 </resources>

@@ -90,7 +90,11 @@ function tokens(sentence) {
   return res;
 }
 
-/** Barcha fayllardagi gaplarni (so'zlar ro'yxati sifatida) oqim bilan beradi. */
+/**
+ * Barcha fayllardagi gap bo'laklarini oqim bilan beradi: { ts: so'zlar, start: gap boshimi }.
+ * Raqam kontekstni uzadi, lekin gap boshi emas ("5 ta", "2024 yil" dagi "ta", "yil" gap boshlamaydi);
+ * ilovadagi ContextParser ham raqamdan keyin oldingi so'zni noma'lum deb oladi.
+ */
 async function* sentences() {
   let n = 0;
   for (const file of inputs) {
@@ -103,10 +107,12 @@ async function* sentences() {
       if (leipzig) line = line.replace(/^\d+\t/, '');
       // havolalardagi nuqtalar gapni bo'lib yubormasligi uchun avval olib tashlanadi
       line = line.replace(JUNK, ' ');
-      // gaplar: . ! ? ... va raqamlar kontekstni uzadi
-      for (const sent of line.split(/[.!?…\d]+/)) {
-        const ts = tokens(sent);
-        if (ts.length > 0) yield ts;
+      for (const sent of line.split(/[.!?…]+/)) {
+        const segs = sent.split(/\d+/);
+        for (let i = 0; i < segs.length; i++) {
+          const ts = tokens(segs[i]);
+          if (ts.length > 0) yield { ts, start: i === 0 };
+        }
       }
     }
   }
@@ -116,7 +122,7 @@ async function* sentences() {
 const shards = new Map();
 let sentenceCount = 0;
 let tokenCount = 0;
-for await (const ts of sentences()) {
+for await (const { ts } of sentences()) {
   sentenceCount++;
   for (const t of ts) {
     let m = shards.get(t[0]);
@@ -145,8 +151,8 @@ candidates.length = 0;
 // 2-o'tish: juftliklar (har oldingi so'z uchun alohida Map — bitta Map 16M yozuvdan oshmasin)
 const rows = new Array(vocab.length);
 const startId = idOf.get(START);
-for await (const ts of sentences()) {
-  let prev = startId;
+for await (const { ts, start } of sentences()) {
+  let prev = start ? startId : -1;
   for (const t of ts) {
     const id = idOf.get(t);
     if (id === undefined) {

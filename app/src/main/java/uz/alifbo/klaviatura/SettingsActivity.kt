@@ -244,6 +244,7 @@ class SettingsActivity : Activity() {
             label(
                 "Söz tahmini modellari oçiq matnlardan yasalgan:\n" +
                     "• UzCrawl — tahrirchi (Apache-2.0): özbekça Telegram bloglari va yangiliklar\n" +
+                    "• UzBooks — tahrirchi (Apache-2.0): özbekça badiiy kitoblar (faqat söz statistikasi)\n" +
                     "• Tatoeba — tatoeba.org (CC BY 2.0 FR): inglizça va ruscha gaplar\n" +
                     "Emoji paneli: AndroidX Emoji2 (Apache-2.0).",
                 13f, ink,

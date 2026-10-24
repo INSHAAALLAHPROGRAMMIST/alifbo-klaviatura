@@ -41,8 +41,10 @@ def classify(t):
     digits = len(DIGIT.findall(t)) / max(1, len(t))
     lines = [ln for ln in t.split("\n") if ln.strip()]
     avg = words / max(1, len(lines))
-    poetry = len(lines) > 300 and avg < 7
-    ok = digits < 0.01 and acad < 1.0 and (speech >= 0.8 or dialog >= 2.0 or poetry)
+    # she'r: qatorlari qisqa (3-8 so'z); lug'at va ro'yxatlarda qator 1-2 so'zdan iborat bo'ladi
+    poetry = len(lines) > 300 and 3 <= avg < 8
+    # "— ..." qatorlari lug'at va ro'yxatlarda ham ko'p, shuning uchun dialog yolg'iz o'zi yetmaydi
+    ok = digits < 0.01 and acad < 1.0 and (speech >= 0.8 or (dialog >= 2.0 and speech >= 0.3) or poetry)
     info = f"nutq={speech:.2f} ilmiy={acad:.2f} dialog={dialog:.2f} raqam={digits:.3f} qator={avg:.1f}"
     return ok, info
 

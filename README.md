@@ -47,7 +47,9 @@ söz tugagaç keyingisini taklif qiladi. Hammasi oflayn:
   Özbek kirill modeli lotin matndan transliteratsiya orqali yasaladi (`tools/translit.mjs`).
 - Katta modellar GitHub Actions'da (`.github/workflows/models.yml`, qö'lda işga tuşiriladi) yasaladi:
   özbek — [UzCrawl](https://huggingface.co/datasets/tahrirchi/uz-crawl) (Apache-2.0; Telegram bloglari +
-  `news-00002`), inglizça va ruscha — [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR). Natija artefakt bölib
+  `news-00002`) va [UzBooks](https://huggingface.co/datasets/tahrirchi/uz-books) (Apache-2.0; `lat` ning
+  birinçi 4 fayli, `--fiction` filtri bilan faqat badiiy kitoblar va şeirlar, ~64 mln söz),
+  inglizça va ruscha — [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR). Natija artefakt bölib
   çiqadi, tekşirilgaç `app/src/main/assets/` ga qö'şiladi. `tools/seed/` — kiçik boşlang'ich matnlar.
 - Shaxsiy örganiş: siz yozgan sözlar `files/personal_<til>.txt` da, faqat telefonda.
   Parol, email, havola va "taklifsiz" maydonlarda tahmin ham, örganiş ham öçiq.

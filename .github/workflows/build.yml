@@ -23,16 +23,27 @@ jobs:
       - name: Imzo kaliti
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD_SECRET: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/alifbo.p12"
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD_SECRET" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/alifbo.p12"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD_SECRET" >> "$GITHUB_ENV"
+            echo "Doimiy imzo kaliti ishlatiladi."
+          else
+            PASS="$(openssl rand -hex 12)"
+            echo "::add-mask::$PASS"
+            keytool -genkeypair -alias alifbo -keyalg RSA -keysize 2048 -validity 10000 \
+              -storetype PKCS12 -keystore "$RUNNER_TEMP/alifbo.p12" \
+              -storepass "$PASS" -keypass "$PASS" -dname "CN=Alifbo vaqtincha"
+            echo "KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "::warning::Doimiy kalit yoq: vaqtinchalik imzo ishlatildi (har yig'ishda boshqa)."
+          fi
           echo "KEYSTORE_FILE=$RUNNER_TEMP/alifbo.p12" >> "$GITHUB_ENV"
 
       - name: Testlar (maketlar va alifbo)
         run: gradle --no-daemon testDebugUnitTest
 
       - name: APK yig'ish
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: gradle --no-daemon assembleRelease
 
       - name: Ruxsatlarni tekshirish (INTERNET bo'lmasligi shart)

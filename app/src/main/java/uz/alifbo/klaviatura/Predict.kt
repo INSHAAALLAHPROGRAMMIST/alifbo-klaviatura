@@ -85,7 +85,8 @@ class Suggester(
                     add(model.word(id), 100.0 + model.nextQuant(prevIdx, k) + model.uni(id) * 0.2)
                 }
             }
-            personal?.next(prev)?.forEach { (w, c) -> add(w, 110.0 + 10.0 * log2(c + 1.0)) }
+            // shaxsiy odat katta korpusdagi umumiy statistikadan kuchliroq bo'lsin
+            personal?.next(prev)?.forEach { (w, c) -> add(w, 150.0 + 30.0 * log2(c + 1.0)) }
             if (scores.size < max) {
                 for (id in model.topUnigrams) {
                     val w = model.word(id)
@@ -107,15 +108,29 @@ class Suggester(
                 i++
             }
             personal?.withPrefix(prefix)?.forEach { (w, c) ->
-                if (w != prefix) add(w, 40.0 + 10.0 * log2(c + 1.0))
+                if (w != prefix) add(w, 120.0 + 25.0 * log2(c + 1.0))
             }
         }
 
-        return scores.entries
-            .sortedWith(compareByDescending<Map.Entry<String, Double>> { it.value }.thenBy { it.key })
-            .take(max)
-            .map { applyCap(it.key, cap) }
+        return topK(scores, max).map { applyCap(it, cap) }
     }
+
+    /** Hammasini saralamasdan eng yaxshi [k] tasini tanlaydi (bir harfli prefiksda minglab nomzod bo'ladi). */
+    private fun topK(scores: Map<String, Double>, k: Int): List<String> {
+        val best = ArrayList<Map.Entry<String, Double>>(k + 1)
+        for (e in scores.entries) {
+            var pos = best.size
+            while (pos > 0 && better(e, best[pos - 1])) pos--
+            if (pos < k) {
+                best.add(pos, e)
+                if (best.size > k) best.removeAt(best.size - 1)
+            }
+        }
+        return best.map { it.key }
+    }
+
+    private fun better(a: Map.Entry<String, Double>, b: Map.Entry<String, Double>): Boolean =
+        a.value > b.value || (a.value == b.value && a.key < b.key)
 
     private fun log2(x: Double): Double = ln(x) / ln(2.0)
 

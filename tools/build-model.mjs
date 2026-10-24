@@ -1,18 +1,20 @@
 #!/usr/bin/env node
 // Matn korpusidan Alifbo tahmin modelini (ALM1 formati) yasaydi. Faqat Node.js kerak, paket yo'q.
+// Fayllar oqim bilan ikki marta o'qiladi (1: so'zlar, 2: juftliklar), shuning uchun GB'lab matnga ham yetadi.
 //
 //   node tools/build-model.mjs --lang uz --in a.txt b.txt --out app/src/main/assets/lm_uz.bin
 //
 // --lang   uz (yangi lotin) | uzc (o'zbek kirill) | en | ru
 // --in     bir yoki bir nechta matn fayli (har qatorda gap(lar)); --leipzig bo'lsa "raqam<TAB>gap"
 // --out    chiqish fayli
-// --max-vocab 60000   --min-count 1   --min-bigram 1
+// --max-vocab 60000   --min-count 1   --min-bigram 1   --max-lines 0 (0 = cheklanmagan)
 //
 // Format (kichik-endian):
 //   "ALM1" | u32 V | V x { u8 len, utf8 bayt, u8 uniQ } | V x { u8 n, n x { u16 id, u8 q } }
 //   so'zlar String.compareTo (UTF-16) tartibida; 0-o'rinda "<s>" (gap boshi).
 //   q = min(255, round(log2(count + 1) * 10)).
 import fs from 'node:fs';
+import readline from 'node:readline';
 import { cyrillicToLatin, latinToCyrillic, oldToNewLatin, scriptOf } from './translit.mjs';
 
 const START = '<s>';
@@ -26,9 +28,10 @@ function opt(name, def) {
 }
 const lang = opt('lang');
 const out = opt('out');
-const maxVocab = Number(opt('max-vocab', '60000'));
+const maxVocab = Math.min(65535, Number(opt('max-vocab', '60000')));
 const minUni = Number(opt('min-count', '1'));
 const minBi = Number(opt('min-bigram', '1'));
+const maxLines = Number(opt('max-lines', '0'));
 const leipzig = args.includes('--leipzig');
 const inputs = [];
 {
@@ -47,12 +50,25 @@ const ALLOWED = {
   uzc: /^[а-яёўқғҳ]+$/u,
 };
 
+// O'zbek korpusidagi inglizcha gaplarni ajratish uchun
+const EN_STOP = new Set(['the', 'and', 'is', 'of', 'to', 'in', 'for', 'with', 'you', 'that', 'are', 'this', 'on', 'it']);
+// O'zbek kirilliga xos harflar: ў қ ғ ҳ (ruscha gaplarni ajratish uchun)
+const UZ_CYR = /[ўқғҳ]/u;
+// Havola, @nom, #teg, email — so'z emas
+const JUNK = /(?:https?:\/\/|www\.)\S+|\S+@\S+\.\S+|[@#][\p{L}\p{N}_]+|t\.me\/\S+/giu;
+
+/** Gapni modelning yozuviga keltiradi; bu tilga tegishli bo'lmasa null. */
 function prepare(sentence) {
-  let s = sentence.normalize('NFC').toLowerCase();
+  let s = sentence.normalize('NFC').toLowerCase().replace(JUNK, ' ');
   if (lang === 'uz' || lang === 'uzc') {
     if (scriptOf(s) === 'cyrl') {
+      if (!UZ_CYR.test(s)) return null; // ruscha bo'lsa kerak
       if (lang === 'uz') s = cyrillicToLatin(s);
     } else {
+      const raw = s.match(/\p{L}+/gu) ?? [];
+      let en = 0;
+      for (const w of raw) if (EN_STOP.has(w)) en++;
+      if (en >= 2) return null; // inglizcha gap
       s = oldToNewLatin(s).replace(/['‘’ʻ`´]/g, TUTUQ);
       if (lang === 'uzc') s = latinToCyrillic(s);
     }
@@ -64,6 +80,7 @@ function prepare(sentence) {
 
 function tokens(sentence) {
   const s = prepare(sentence);
+  if (s === null) return [];
   const re = lang === 'en' ? /[\p{L}']+/gu : /[\p{L}ʼ]+/gu;
   const res = [];
   for (let t of s.match(re) ?? []) {
@@ -73,42 +90,77 @@ function tokens(sentence) {
   return res;
 }
 
-const uni = new Map();
-const big = new Map();
-function bump(map, key) {
-  map.set(key, (map.get(key) ?? 0) + 1);
-}
-
-let sentenceCount = 0;
-for (const file of inputs) {
-  const text = fs.readFileSync(file, 'utf8');
-  for (let line of text.split(/\r?\n/)) {
-    if (leipzig) line = line.replace(/^\d+\t/, '');
-    // gaplar: . ! ? ... va raqamlar kontekstni uzadi
-    for (const sent of line.split(/[.!?…\d]+/)) {
-      const ts = tokens(sent);
-      if (ts.length === 0) continue;
-      sentenceCount++;
-      let prev = START;
-      for (const t of ts) {
-        bump(uni, t);
-        let row = big.get(prev);
-        if (!row) big.set(prev, (row = new Map()));
-        bump(row, t);
-        prev = t;
+/** Barcha fayllardagi gaplarni (so'zlar ro'yxati sifatida) oqim bilan beradi. */
+async function* sentences() {
+  let n = 0;
+  for (const file of inputs) {
+    const rl = readline.createInterface({ input: fs.createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
+    for await (let line of rl) {
+      if (maxLines > 0 && ++n > maxLines) {
+        rl.close();
+        return;
+      }
+      if (leipzig) line = line.replace(/^\d+\t/, '');
+      // havolalardagi nuqtalar gapni bo'lib yubormasligi uchun avval olib tashlanadi
+      line = line.replace(JUNK, ' ');
+      // gaplar: . ! ? ... va raqamlar kontekstni uzadi
+      for (const sent of line.split(/[.!?…\d]+/)) {
+        const ts = tokens(sent);
+        if (ts.length > 0) yield ts;
       }
     }
   }
 }
 
-const kept = [...uni.entries()]
-  .filter(([, c]) => c >= minUni)
+// 1-o'tish: so'zlar (birinchi harf bo'yicha bo'lingan Map'lar — bitta Map 16M yozuvdan oshmasin)
+const shards = new Map();
+let sentenceCount = 0;
+let tokenCount = 0;
+for await (const ts of sentences()) {
+  sentenceCount++;
+  for (const t of ts) {
+    let m = shards.get(t[0]);
+    if (!m) shards.set(t[0], (m = new Map()));
+    m.set(t, (m.get(t) ?? 0) + 1);
+    tokenCount++;
+  }
+}
+let distinct = 0;
+for (const m of shards.values()) distinct += m.size;
+console.error(`${lang}: 1-o'tish: ${sentenceCount} gap, ${tokenCount} so'z, ${distinct} xil`);
+
+const candidates = [];
+for (const m of shards.values()) for (const [w, c] of m) if (c >= minUni) candidates.push([w, c]);
+const kept = candidates
   .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-  .slice(0, maxVocab - 1)
-  .map(([w]) => w);
-const vocab = [START, ...kept].sort();
+  .slice(0, maxVocab - 1);
+const countOf = new Map(kept);
+const vocab = [START, ...kept.map(([w]) => w)].sort();
 const idOf = new Map(vocab.map((w, i) => [w, i]));
 if (vocab[0] !== START) throw new Error('"<s>" 0-o\'rinda bo\'lishi kerak');
+const uniOf = (w) => (w === START ? 0 : countOf.get(w));
+shards.clear();
+candidates.length = 0;
+
+// 2-o'tish: juftliklar (har oldingi so'z uchun alohida Map — bitta Map 16M yozuvdan oshmasin)
+const rows = new Array(vocab.length);
+const startId = idOf.get(START);
+for await (const ts of sentences()) {
+  let prev = startId;
+  for (const t of ts) {
+    const id = idOf.get(t);
+    if (id === undefined) {
+      prev = -1; // lug'atda yo'q so'z kontekstni uzadi
+      continue;
+    }
+    if (prev >= 0) {
+      let row = rows[prev];
+      if (!row) rows[prev] = row = new Map();
+      row.set(id, (row.get(id) ?? 0) + 1);
+    }
+    prev = id;
+  }
+}
 
 const q = (count) => Math.min(255, Math.round(Math.log2(count + 1) * 10));
 
@@ -119,21 +171,21 @@ parts.push(u32);
 for (const w of vocab) {
   const b = Buffer.from(w, 'utf8');
   if (b.length > 255) throw new Error('so\'z juda uzun: ' + w);
-  parts.push(Buffer.from([b.length]), b, Buffer.from([w === START ? 0 : q(uni.get(w))]));
+  parts.push(Buffer.from([b.length]), b, Buffer.from([w === START ? 0 : q(uniOf(w))]));
 }
 let bigramEntries = 0;
-for (const w of vocab) {
-  const row = big.get(w);
+for (let i = 0; i < vocab.length; i++) {
+  const row = rows[i];
   const entries = row
     ? [...row.entries()]
-        .filter(([n, c]) => c >= minBi && idOf.has(n))
-        .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+        .filter(([, c]) => c >= minBi)
+        .sort((a, b) => b[1] - a[1] || (vocab[a[0]] < vocab[b[0]] ? -1 : 1))
         .slice(0, K)
     : [];
   parts.push(Buffer.from([entries.length]));
-  for (const [n, c] of entries) {
+  for (const [id, c] of entries) {
     const e = Buffer.alloc(3);
-    e.writeUInt16LE(idOf.get(n), 0);
+    e.writeUInt16LE(id, 0);
     e.writeUInt8(q(c), 2);
     parts.push(e);
     bigramEntries++;
@@ -141,4 +193,4 @@ for (const w of vocab) {
 }
 const data = Buffer.concat(parts);
 fs.writeFileSync(out, data);
-console.log(`${lang}: ${sentenceCount} gap, ${vocab.length} so'z, ${bigramEntries} bigram, ${data.length} bayt -> ${out}`);
+console.log(`${lang}: ${sentenceCount} gap, ${tokenCount} so'z, lug'at ${vocab.length}, ${bigramEntries} juftlik, ${data.length} bayt -> ${out}`);

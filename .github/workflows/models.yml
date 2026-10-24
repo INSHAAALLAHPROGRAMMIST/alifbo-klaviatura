@@ -1,0 +1,68 @@
+name: models
+
+# Katta korpusdan tahmin modellarini yasaydi va artefakt sifatida beradi.
+# Qo'lda ishga tushiriladi; natijani tekshirib, app/src/main/assets ga qo'shamiz.
+on:
+  workflow_dispatch:
+
+jobs:
+  models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Korpuslarni yuklab olish
+        run: |
+          mkdir -p corpus
+          HF=https://huggingface.co/datasets/tahrirchi/uz-crawl/resolve/main/data
+          curl -L --fail --retry 3 -sS -o corpus/tg.parquet "$HF/telegram_blogs-00000-of-00001.parquet"
+          curl -L --fail --retry 3 -sS -o corpus/news.parquet "$HF/news-00002-of-00007.parquet"
+          curl -L --fail --retry 3 -sS -o corpus/eng.tsv.bz2 https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2
+          curl -L --fail --retry 3 -sS -o corpus/rus.tsv.bz2 https://downloads.tatoeba.org/exports/per_language/rus/rus_sentences.tsv.bz2
+          ls -la corpus
+
+      - name: Matnga aylantirish
+        run: |
+          pip install --quiet pyarrow
+          python3 tools/parquet-to-text.py corpus/tg.parquet corpus/uz_tg.txt
+          python3 tools/parquet-to-text.py corpus/news.parquet corpus/uz_news.txt
+          bzcat corpus/eng.tsv.bz2 | cut -f3 > corpus/en.txt
+          bzcat corpus/rus.tsv.bz2 | cut -f3 > corpus/ru.txt
+          rm -f corpus/*.parquet corpus/*.bz2
+          wc -l corpus/*.txt
+          du -h corpus/*.txt
+
+      - name: Modellarni yasash
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+        run: |
+          mkdir -p models
+          UZ="corpus/uz_tg.txt corpus/uz_news.txt tools/seed/uz.txt"
+          node tools/build-model.mjs --lang uz  --in $UZ --out models/lm_uz.bin  --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
+          node tools/build-model.mjs --lang uzc --in $UZ --out models/lm_uzc.bin --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
+          node tools/build-model.mjs --lang en  --in corpus/en.txt tools/seed/en.txt --out models/lm_en.bin --max-vocab 40000 --min-count 2 --min-bigram 2 | tee -a models/stats.txt
+          node tools/build-model.mjs --lang ru  --in corpus/ru.txt tools/seed/ru.txt --out models/lm_ru.bin --max-vocab 50000 --min-count 2 --min-bigram 2 | tee -a models/stats.txt
+
+      - name: Tekshirish
+        run: |
+          for l in uz uzc en ru; do node tools/query-model.mjs models/lm_$l.bin --check; done
+          {
+            echo "--- uz";  node tools/query-model.mjs models/lm_uz.bin --next '<s>' --prefix yax
+            node tools/query-model.mjs models/lm_uz.bin --next men --prefix ö
+            node tools/query-model.mjs models/lm_uz.bin --next bugun --prefix kit
+            echo "--- uzc"; node tools/query-model.mjs models/lm_uzc.bin --next мен --prefix ях
+            echo "--- en";  node tools/query-model.mjs models/lm_en.bin --next i --prefix thi
+            echo "--- ru";  node tools/query-model.mjs models/lm_ru.bin --next я --prefix хо
+          } | tee -a models/stats.txt
+          ls -la models
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alifbo-models
+          path: models/
+          if-no-files-found: error

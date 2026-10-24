@@ -77,6 +77,7 @@ class SettingsActivity : Activity() {
         buildOptionsCard()
         buildPredictCard()
         buildLangCard()
+        buildSourcesCard()
 
         val foot = label(
             "Ilova heç qanday ruxsat söramaydi va internetga ulana olmaydi. " +
@@ -235,6 +236,19 @@ class SettingsActivity : Activity() {
             }
             c.addView(cb)
         }
+    }
+
+    private fun buildSourcesCard() {
+        val c = card("Manbalar")
+        c.addView(
+            label(
+                "Söz tahmini modellari oçiq matnlardan yasalgan:\n" +
+                    "• UzCrawl — tahrirchi (Apache-2.0): özbekça Telegram bloglari va yangiliklar\n" +
+                    "• Tatoeba — tatoeba.org (CC BY 2.0 FR): inglizça va ruscha gaplar\n" +
+                    "Emoji paneli: AndroidX Emoji2 (Apache-2.0).",
+                13f, ink,
+            ),
+        )
     }
 
     // ---------------------------------------------------------------- holat

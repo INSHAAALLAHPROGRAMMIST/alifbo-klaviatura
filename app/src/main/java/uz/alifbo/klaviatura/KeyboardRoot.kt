@@ -28,7 +28,7 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
         onEmojiBack = { hideEmoji() }
 
         val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        column.addView(strip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44f).toInt()))
+        column.addView(strip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(STRIP_DP).toInt()))
         body.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         addView(column, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
@@ -64,5 +64,10 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     fun hideEmoji() {
         emoji?.visibility = View.GONE
         keyboard.visibility = View.VISIBLE
+    }
+
+    companion object {
+        /** Tahmin qatorining balandligi (dp). */
+        const val STRIP_DP = 38f
     }
 }

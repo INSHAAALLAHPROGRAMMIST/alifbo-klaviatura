@@ -39,8 +39,8 @@ class KeyboardRootMeasureTest {
             MeasureSpec.makeMeasureSpec(screenH, MeasureSpec.AT_MOST),
         )
         val d = ctx.resources.displayMetrics.density
-        // qator 44dp + 4 qator x 52dp + yuqori/pastki 6dp
-        val expected = (44 * d).toInt() + (4 * 52 * d + 12 * d).toInt()
+        // tahmin qatori + 4 qator x 52dp + yuqori/pastki 6dp
+        val expected = (KeyboardRoot.STRIP_DP * d).toInt() + (4 * 52 * d + 12 * d).toInt()
         assertTrue("balandlik ${root.measuredHeight} px: butun ekran emas, ~$expected bo'lishi kerak", root.measuredHeight < screenH / 2)
         assertEquals(expected.toDouble(), root.measuredHeight.toDouble(), 3.0)
     }

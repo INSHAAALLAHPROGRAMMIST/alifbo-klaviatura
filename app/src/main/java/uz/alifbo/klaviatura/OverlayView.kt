@@ -92,6 +92,7 @@ class OverlayView(context: Context) : View(context) {
         val left = (key.centerX() - w / 2f).coerceIn(dp(2f), max(dp(2f), width - w - dp(2f)))
         val bottom = key.top + prevKeyH * 0.30f
         val r = RectF(left, bottom - h, left + w, bottom)
+        if (r.top < dp(1f)) r.offset(0f, dp(1f) - r.top)
         val corner = dp(10f)
         fill.color = theme.popup
         canvas.drawRoundRect(r, corner, corner, fill)
@@ -106,6 +107,15 @@ class OverlayView(context: Context) : View(context) {
 
     private fun drawPopup(canvas: Canvas) {
         if (popRects.isEmpty()) return
+        val top = popRects.first().top - dp(2f)
+        val dy = if (top < dp(1f)) dp(1f) - top else 0f
+        canvas.save()
+        canvas.translate(0f, dy)
+        drawPopupInner(canvas)
+        canvas.restore()
+    }
+
+    private fun drawPopupInner(canvas: Canvas) {
         val corner = dp(10f)
         val bg = RectF(
             popRects.minOf { it.left } - dp(2f), popRects.first().top - dp(2f),

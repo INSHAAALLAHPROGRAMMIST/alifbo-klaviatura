@@ -7,7 +7,9 @@ import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import java.io.File
 
 class AlifboIme : InputMethodService(), KeyboardListener {
 
@@ -21,14 +23,25 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     private var enter = EnterStyle.RETURN
     private var lastShiftTap = 0L
 
+    // tahmin
+    private var predictOn = false
+    private var learnOn = false
+    private var justAccepted = false
+    private var knownEpoch = 0
+    private val models = HashMap<String, LanguageModel>()
+    private val personals = HashMap<String, PersonalModel>()
+    private val suggesters = HashMap<String, Suggester>()
+
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        knownEpoch = prefs.personalEpoch
         loadLangs()
     }
 
     override fun onCreateInputView(): View {
         val r = KeyboardRoot(this, this)
+        r.strip.onPick = { onSuggestion(it) }
         root = r
         applyPrefs()
         applyLayout()
@@ -40,16 +53,29 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         loadLangs()
+        if (prefs.personalEpoch != knownEpoch) {
+            knownEpoch = prefs.personalEpoch
+            personals.clear()
+            suggesters.clear()
+        }
         val cls = info.inputType and InputType.TYPE_MASK_CLASS
         page = if (cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE ||
             cls == InputType.TYPE_CLASS_DATETIME
         ) Page.SYM1 else Page.LETTERS
         enter = enterStyleFor(info)
         shift = Shift.OFF
+        justAccepted = false
+        configurePrediction(info)
         root?.hideEmoji()
         applyPrefs()
         applyLayout()
         updateAutoCap()
+        refreshSuggestions()
+    }
+
+    override fun onFinishInput() {
+        savePersonal()
+        super.onFinishInput()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -57,9 +83,26 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         super.onFinishInputView(finishingInput)
     }
 
+    override fun onDestroy() {
+        savePersonal()
+        super.onDestroy()
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         applyPrefs()
+    }
+
+    override fun onUpdateSelection(
+        oldSelStart: Int,
+        oldSelEnd: Int,
+        newSelStart: Int,
+        newSelEnd: Int,
+        candidatesStart: Int,
+        candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        refreshSuggestions()
     }
 
     // ---------------------------------------------------------------- sozlamalar
@@ -92,7 +135,6 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         k.langShorts = langs.map { it.short }
         k.shift = shift
         k.enterStyle = enter
-        r.strip.title = lang.title
         k.setLayout(if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow) else Layouts.symbols(page))
     }
 
@@ -130,33 +172,161 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     private fun afterInput() {
         if (shift == Shift.ONCE) setShift(Shift.OFF)
         updateAutoCap()
+        refreshSuggestions()
+    }
+
+    // ---------------------------------------------------------------- tahmin
+
+    /** Parol, email, havola va "taklif kerak emas" maydonlarida tahmin ham, o'rganish ham o'chiq. */
+    private fun configurePrediction(info: EditorInfo) {
+        val cls = info.inputType and InputType.TYPE_MASK_CLASS
+        val variation = info.inputType and InputType.TYPE_MASK_VARIATION
+        val isText = cls == InputType.TYPE_CLASS_TEXT
+        val sensitive = isText && (
+            variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_URI ||
+                variation == InputType.TYPE_TEXT_VARIATION_FILTER
+            )
+        val noSuggestions = isText && (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0
+        predictOn = prefs.predict && isText && !sensitive && !noSuggestions
+        learnOn = predictOn && prefs.learn &&
+            (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) == 0
+    }
+
+    private fun modelFor(lang: Lang): LanguageModel = models.getOrPut(lang.id) {
+        try {
+            assets.open("lm_${lang.id}.bin").use { LanguageModel.parse(it.readBytes()) }
+        } catch (t: Throwable) {
+            LanguageModel.EMPTY
+        }
+    }
+
+    private fun personalFor(lang: Lang): PersonalModel = personals.getOrPut(lang.id) {
+        try {
+            val f = File(filesDir, "personal_${lang.id}.txt")
+            if (f.exists()) PersonalModel.parse(f.readText()) else PersonalModel()
+        } catch (t: Throwable) {
+            PersonalModel()
+        }
+    }
+
+    private fun suggesterFor(lang: Lang): Suggester =
+        suggesters.getOrPut(lang.id) { Suggester(modelFor(lang), personalFor(lang), lang) }
+
+    private fun refreshSuggestions() {
+        val strip = root?.strip ?: return
+        if (!predictOn || page != Page.LETTERS) {
+            strip.suggestions = emptyList()
+            return
+        }
+        try {
+            val ic = currentInputConnection
+            val before = ic?.getTextBeforeCursor(80, 0)
+            if (before == null) {
+                strip.suggestions = emptyList()
+                return
+            }
+            val ctx = ContextParser.parse(before)
+            val style = Suggester.capStyle(ctx.prefix, shift)
+            strip.suggestions = suggesterFor(langs[langIdx]).suggest(ctx, style, 3)
+        } catch (t: Throwable) {
+            strip.suggestions = emptyList()
+        }
+    }
+
+    private fun onSuggestion(index: Int) {
+        val strip = root?.strip ?: return
+        val word = strip.suggestions.getOrNull(index) ?: return
+        val ic = currentInputConnection ?: return
+        try {
+            val before = ic.getTextBeforeCursor(80, 0) ?: ""
+            val ctx = ContextParser.parse(before)
+            ic.beginBatchEdit()
+            if (ctx.prefix.isNotEmpty()) ic.deleteSurroundingText(ctx.prefix.length, 0)
+            ic.commitText("$word ", 1)
+            ic.endBatchEdit()
+            learnWord(ctx.prev, word)
+        } catch (t: Throwable) {
+            return
+        }
+        justAccepted = true
+        afterInput()
+    }
+
+    private fun learnFromCursor(ic: InputConnection) {
+        if (!learnOn) return
+        try {
+            val before = ic.getTextBeforeCursor(80, 0) ?: return
+            val ctx = ContextParser.parse(before)
+            learnWord(ctx.prev, ctx.prefix)
+        } catch (t: Throwable) {
+            // o'rganish yozishga xalaqit bermasligi kerak
+        }
+    }
+
+    private fun learnWord(prevRaw: String?, wordRaw: String) {
+        if (!learnOn) return
+        val lang = langs[langIdx]
+        val w = Norm.word(wordRaw, lang)
+        if (w.length < 2 || w.length > 30 || !w.all { ContextParser.isWordChar(it) }) return
+        val prev = prevRaw?.let { if (it == ContextParser.START) it else Norm.word(it, lang) }
+        val pm = personalFor(lang)
+        pm.learn(prev, w)
+        if (pm.pending >= 40) savePersonal()
+    }
+
+    private fun savePersonal() {
+        for ((id, pm) in personals) {
+            if (!pm.dirty) continue
+            try {
+                File(filesDir, "personal_$id.txt").writeText(pm.serialize())
+                pm.markSaved()
+            } catch (t: Throwable) {
+                // joy yetmasa keyingi safar urinamiz
+            }
+        }
     }
 
     // ---------------------------------------------------------------- KeyboardListener
 
     override fun onText(text: String) {
         val ic = currentInputConnection ?: return
+        if (text.isNotEmpty() && !ContextParser.isWordChar(text[0])) learnFromCursor(ic)
+        if (justAccepted && text.length == 1 && text[0] in ",.!?;:") {
+            if (ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
+        }
+        justAccepted = false
         ic.commitText(text, 1)
         afterInput()
     }
 
     override fun onSpace() {
         val ic = currentInputConnection ?: return
+        learnFromCursor(ic)
+        justAccepted = false
         ic.commitText(" ", 1)
         afterInput()
     }
 
     override fun onDelete() {
         val ic = currentInputConnection ?: return
+        justAccepted = false
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) ic.commitText("", 1)
         else sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
         updateAutoCap()
+        refreshSuggestions()
     }
 
     override fun onEnter() {
         val info = currentInputEditorInfo ?: return
         val ic = currentInputConnection ?: return
+        learnFromCursor(ic)
+        justAccepted = false
         val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
         val noAction = info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
         if (!noAction && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
@@ -165,6 +335,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
         }
         updateAutoCap()
+        refreshSuggestions()
     }
 
     override fun onShiftTap() {
@@ -178,16 +349,19 @@ class AlifboIme : InputMethodService(), KeyboardListener {
             },
         )
         lastShiftTap = now
+        refreshSuggestions()
     }
 
     override fun onShiftHold() {
         setShift(Shift.CAPS)
+        refreshSuggestions()
     }
 
     override fun onPage(page: Page) {
         this.page = page
         applyLayout()
         if (page == Page.LETTERS) updateAutoCap()
+        refreshSuggestions()
     }
 
     override fun onLanguageNext() {
@@ -212,6 +386,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         if (page != Page.LETTERS) page = Page.LETTERS
         applyLayout()
         updateAutoCap()
+        refreshSuggestions()
     }
 
     override fun onEmoji() {

@@ -35,6 +35,24 @@ Probelni yonga surişş — tilni almaştiradi; glob tugmasini uzoq bosiş — t
   CI har yig'işda `aapt2 dump permissions` bilan tekşiradi va INTERNET çiqsa to'xtaydi.
 - `allowBackup=false`; sozlamalar faqat ilovaning özida (SharedPreferences).
 
+## Söz tahmini
+
+Klaviatura tepasidagi qatorda 3 ta taklif: eng yaxşisi o'rtada. Yozilayotgan sözni tugatadi,
+söz tugagaç keyingisini taklif qiladi. Hammasi oflayn:
+
+- `app/src/main/assets/lm_<til>.bin` — tayyor model (ALM1): lug'at, chastota, keyingi söz jadvali.
+  `tools/build-model.mjs` matn korpusidan yasaydi, `tools/query-model.mjs` mustaqil tekşiradi.
+  Özbek kirill modeli lotin matndan transliteratsiya orqali yasaladi (`tools/translit.mjs`).
+- Hozirgi modellar `tools/seed/` dagi kiçik boşlang'ich matnlardan; katta korpus keyingi bosqiç.
+- Shaxsiy örganiş: siz yozgan sözlar `files/personal_<til>.txt` da, faqat telefonda.
+  Parol, email, havola va "taklifsiz" maydonlarda tahmin ham, örganiş ham öçiq.
+
+```
+node tools/build-model.mjs --lang uz  --in tools/seed/uz.txt --out app/src/main/assets/lm_uz.bin
+node tools/build-model.mjs --lang uzc --in tools/seed/uz.txt --out app/src/main/assets/lm_uzc.bin
+node tools/query-model.mjs app/src/main/assets/lm_uz.bin --check --next men --prefix yax
+```
+
 ## Emoji
 
 `androidx.emoji2:emoji2-emojipicker` (rasmiy, Apache 2.0): toifalar, so'nggilar, teri ranglari.

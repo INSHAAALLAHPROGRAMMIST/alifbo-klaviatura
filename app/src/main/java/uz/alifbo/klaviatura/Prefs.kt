@@ -54,6 +54,21 @@ class Prefs(private val context: Context) {
         get() = bool("hints", false)
         set(v) = putBool("hints", v)
 
+    /** Tahmin qatori (so'z takliflari). */
+    var predict: Boolean
+        get() = bool("predict", true)
+        set(v) = putBool("predict", v)
+
+    /** Yozilgan so'zlardan o'rganish (faqat telefonda saqlanadi). */
+    var learn: Boolean
+        get() = bool("learn", true)
+        set(v) = putBool("learn", v)
+
+    /** O'rganilganlarni o'chirganda oshiriladi: klaviatura xotiradagi nusxani tashlab yuboradi. */
+    var personalEpoch: Int
+        get() = int("personalEpoch", 0)
+        set(v) = putInt("personalEpoch", v)
+
     var langsCsv: String
         get() = sp.getString("langs", "uz,en,ru,uzc") ?: "uz,en,ru,uzc"
         set(v) { sp.edit().putString("langs", v).apply() }

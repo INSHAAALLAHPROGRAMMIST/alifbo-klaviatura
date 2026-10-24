@@ -21,6 +21,8 @@ import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
+import android.widget.Toast
+import java.io.File
 
 /** Sozlamalar ekrani: yoqish bosqichlari, jonli ko'rinish, tema, o'lchamlar, tillar. Hech qanday tarmoq ishlatmaydi. */
 class SettingsActivity : Activity() {
@@ -73,6 +75,7 @@ class SettingsActivity : Activity() {
         buildThemeCard()
         buildSizeCard()
         buildOptionsCard()
+        buildPredictCard()
         buildLangCard()
 
         val foot = label(
@@ -187,6 +190,27 @@ class SettingsActivity : Activity() {
         switchRow(c, "Tugma tovuşi", prefs.sound) { prefs.sound = it }
         switchRow(c, "Raqam qatori", prefs.numberRow) { prefs.numberRow = it }
         switchRow(c, "Tugmalarda raqam körsatkiçi", prefs.showHints) { prefs.showHints = it }
+    }
+
+    private fun buildPredictCard() {
+        val c = card("Söz tahmini")
+        switchRow(c, "Tahmin qatori", prefs.predict) { prefs.predict = it }
+        switchRow(c, "Shaxsiy örganiş", prefs.learn) { prefs.learn = it }
+        c.addView(
+            label(
+                "Örganilgan sözlar faqat telefoningizda saqlanadi. Parol, email va havola " +
+                    "maydonlarida klaviatura hec narsa örganmaydi va taklif körsatmaydi.",
+                12f, muted,
+            ),
+            lp().apply { topMargin = dpi(6) },
+        )
+        c.addView(pill("Örganilgan sözlarni öçiriş") { clearLearned() }, lp().apply { topMargin = dpi(10) })
+    }
+
+    private fun clearLearned() {
+        for (l in Lang.entries) File(filesDir, "personal_${l.id}.txt").delete()
+        prefs.personalEpoch = prefs.personalEpoch + 1
+        Toast.makeText(this, "Örganilgan sözlar öçirildi", Toast.LENGTH_SHORT).show()
     }
 
     private fun buildLangCard() {

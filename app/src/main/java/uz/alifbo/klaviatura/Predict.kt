@@ -86,7 +86,7 @@ class Suggester(
                 }
             }
             // shaxsiy odat katta korpusdagi umumiy statistikadan kuchliroq bo'lsin
-            personal?.next(prev)?.forEach { (w, c) -> add(w, 150.0 + 30.0 * log2(c + 1.0)) }
+            personal?.next(prev)?.forEach { (w, c) -> if (trusted(w, c)) add(w, 150.0 + 30.0 * log2(c + 1.0)) }
             if (scores.size < max) {
                 for (id in model.topUnigrams) {
                     val w = model.word(id)
@@ -108,12 +108,18 @@ class Suggester(
                 i++
             }
             personal?.withPrefix(prefix)?.forEach { (w, c) ->
-                if (w != prefix) add(w, 120.0 + 25.0 * log2(c + 1.0))
+                if (w != prefix && trusted(w, c)) add(w, 120.0 + 25.0 * log2(c + 1.0))
             }
         }
 
         return topK(scores, max).map { applyCap(it, cap) }
     }
+
+    /**
+     * Lug'atda yo'q shaxsiy so'z kamida 2 marta yozilgandagina taklif qilinadi:
+     * bir marta qilingan imlo xatosi taklifga chiqib qolmasin.
+     */
+    private fun trusted(word: String, count: Int): Boolean = count >= 2 || model.indexOf(word) >= 0
 
     /** Hammasini saralamasdan eng yaxshi [k] tasini tanlaydi (bir harfli prefiksda minglab nomzod bo'ladi). */
     private fun topK(scores: Map<String, Double>, k: Int): List<String> {

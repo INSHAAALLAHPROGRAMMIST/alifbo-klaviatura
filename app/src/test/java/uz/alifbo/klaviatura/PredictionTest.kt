@@ -161,6 +161,24 @@ class PredictionTest {
     }
 
     @Test
+    fun birMartalikXato_taklifgaChiqmaydi() {
+        val p = PersonalModel()
+        p.learn("bu", "zzqxato")
+        assertFalse(suggest(Lang.UZ, "zzqx", personal = p).contains("zzqxato"))
+        assertFalse(suggest(Lang.UZ, "bu ", personal = p).contains("zzqxato"))
+        p.learn("bu", "zzqxato")
+        assertTrue(suggest(Lang.UZ, "zzqx", personal = p).contains("zzqxato"))
+    }
+
+    @Test
+    fun lugatdagiSoz_birMartadaYoqKuchayadi() {
+        // lug'atdagi so'z bir marta yozilganda ham shaxsiy kuchaytirish oladi
+        val p = PersonalModel()
+        p.learn("zzqoldin", yaxshi)
+        assertTrue(suggest(Lang.UZ, "zzqoldin ", personal = p).contains(yaxshi))
+    }
+
+    @Test
     fun shaxsiyModel_saqlashVaOqish() {
         val p = PersonalModel()
         p.learn("<s>", "salom")

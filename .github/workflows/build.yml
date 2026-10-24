@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Imzo kaliti
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/alifbo.p12"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/alifbo.p12" >> "$GITHUB_ENV"
+
+      - name: Testlar (maketlar va alifbo)
+        run: gradle --no-daemon testDebugUnitTest
+
+      - name: APK yig'ish
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: gradle --no-daemon assembleRelease
+
+      - name: Ruxsatlarni tekshirish (INTERNET bo'lmasligi shart)
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          APK="$(ls app/build/outputs/apk/release/*.apk | head -1)"
+          echo "APK: $APK"
+          "$BT/aapt2" dump permissions "$APK" | tee permissions.txt
+          if grep -q "android.permission.INTERNET" permissions.txt; then
+            echo "XATO: APK'da INTERNET ruxsati bor"
+            exit 1
+          fi
+          echo "Ruxsatlar toza: INTERNET yo'q."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alifbo-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

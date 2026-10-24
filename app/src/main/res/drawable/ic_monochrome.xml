@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ "temali ikon" uchun bir rangli variant: pufakcha chizig'i, Ö va yulduzcha.
+     Tizim rangni o'zi beradi, shuning uchun faqat shakl (shaffoflik) muhim. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M38,30 H70 A12,12 0 0 1 82,42 V60 A12,12 0 0 1 70,72 H46 L34,81 L36,71.6 A12,12 0 0 1 26,60 V42 A12,12 0 0 1 38,30 Z"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.6"
+        android:strokeColor="#FF000000" />
+    <path
+        android:pathData="M43.4,56 a8.6,9.8 0 1,0 17.2,0 a8.6,9.8 0 1,0 -17.2,0"
+        android:strokeWidth="5"
+        android:strokeColor="#FF000000" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M44.5,40.2 a2.9,2.9 0 1,0 5.8,0 a2.9,2.9 0 1,0 -5.8,0 Z M53.7,40.2 a2.9,2.9 0 1,0 5.8,0 a2.9,2.9 0 1,0 -5.8,0 Z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M71,33 Q72,39.5 78,40.5 Q72,41.5 71,48 Q70,41.5 64,40.5 Q70,39.5 71,33 Z" />
+</vector>

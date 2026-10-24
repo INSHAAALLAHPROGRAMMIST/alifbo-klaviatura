@@ -7,5 +7,5 @@
         <item name="android:colorPrimary">@color/alifbo_accent</item>
     </style>
     <color name="alifbo_accent">#2F6FED</color>
-    <color name="ic_background">#2F6FED</color>
+    <color name="ic_background">#F3F6FF</color>
 </resources>

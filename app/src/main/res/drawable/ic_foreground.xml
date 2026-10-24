@@ -1,10 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- "Aqlli yozuv": ko'k xabar pufakchasi, ichida Ö va taklifni bildiruvchi sariq yulduzcha.
+     108x108 moslashuvchan ikon maydoni; asosiy qism markaziy 66dp xavfsiz doirada. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <path android:pathData="M38,30 H70 A12,12 0 0 1 82,42 V60 A12,12 0 0 1 70,72 H46 L34,81 L36,71.6 A12,12 0 0 1 26,60 V42 A12,12 0 0 1 38,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="26"
+                android:startY="30"
+                android:endX="82"
+                android:endY="81">
+                <item android:offset="0" android:color="#FF4F86FF" />
+                <item android:offset="1" android:color="#FF2148D0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Ö: halqa va ikki nuqta -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,38h10v10h-10z M43,38h10v10h-10z M56,38h10v10h-10z M69,38h10v10h-10z M30,51h10v10h-10z M43,51h10v10h-10z M56,51h10v10h-10z M69,51h10v10h-10z M30,64h10v8h-10z M43,64h36v8h-36z" />
+        android:pathData="M43.4,56 a8.6,9.8 0 1,0 17.2,0 a8.6,9.8 0 1,0 -17.2,0"
+        android:strokeWidth="5"
+        android:strokeColor="#FFFFFFFF" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M44.5,40.2 a2.9,2.9 0 1,0 5.8,0 a2.9,2.9 0 1,0 -5.8,0 Z M53.7,40.2 a2.9,2.9 0 1,0 5.8,0 a2.9,2.9 0 1,0 -5.8,0 Z" />
+
+    <!-- yulduzcha -->
+    <path
+        android:fillColor="#FFFFD34D"
+        android:pathData="M71,33 Q72,39.5 78,40.5 Q72,41.5 71,48 Q70,41.5 64,40.5 Q70,39.5 71,33 Z" />
 </vector>

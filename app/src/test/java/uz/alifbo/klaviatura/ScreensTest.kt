@@ -3,7 +3,9 @@ package uz.alifbo.klaviatura
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.drawable.AdaptiveIconDrawable
 import android.view.View
 import android.view.View.MeasureSpec
 import android.view.ViewGroup
@@ -133,15 +135,43 @@ class ScreensTest {
         FileOutputStream(File(outDir, "sozlamalar.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    private fun png(name: String, size: Int, block: (Canvas) -> Unit) {
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        block(Canvas(bmp))
+        FileOutputStream(File(outDir, "$name.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     @Test
     fun ikon() {
         val size = 432
-        for ((name, res) in listOf("ikon" to R.mipmap.ic_launcher, "ikon_doira" to R.mipmap.ic_launcher_round)) {
-            val d = ctx.getDrawable(res) ?: continue
-            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val d = ctx.getDrawable(R.mipmap.ic_launcher) as AdaptiveIconDrawable
+        png("ikon", size) { c ->
             d.setBounds(0, 0, size, size)
-            d.draw(Canvas(bmp))
-            FileOutputStream(File(outDir, "$name.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            d.draw(c)
+        }
+        // telefonlardagi niqoblar: 108dp qatlamning markaziy 72dp qismi ko'rinadi
+        val full = (size * 1.5f).toInt()
+        val off = -(full - size) / 2
+        for ((name, frac) in listOf("ikon_doira" to 0.5f, "ikon_yumaloq" to 0.3f)) {
+            png(name, size) { c ->
+                val p = Path().apply {
+                    addRoundRect(RectF(0f, 0f, size.toFloat(), size.toFloat()), size * frac, size * frac, Path.Direction.CW)
+                }
+                c.clipPath(p)
+                d.background?.apply { setBounds(off, off, off + full, off + full); draw(c) }
+                d.foreground?.apply { setBounds(off, off, off + full, off + full); draw(c) }
+            }
+        }
+        // Android 13+ temali ikon: tizim bir rangga bo'yaydi
+        png("ikon_temali", size) { c ->
+            val p = Path().apply { addCircle(size / 2f, size / 2f, size / 2f, Path.Direction.CW) }
+            c.clipPath(p)
+            c.drawColor(0xFFDCE4F7.toInt())
+            d.monochrome?.mutate()?.apply {
+                setTint(0xFF1E3A7B.toInt())
+                setBounds(off, off, off + full, off + full)
+                draw(c)
+            }
         }
     }
 }

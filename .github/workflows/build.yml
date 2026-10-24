@@ -44,6 +44,14 @@ jobs:
       - name: Testlar (maketlar va alifbo)
         run: gradle --no-daemon testDebugUnitTest
 
+      - name: Dizayn rasmlari
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ekranlar
+          path: app/build/screens/
+          if-no-files-found: warn
+
       - name: APK yig'ish
         run: gradle --no-daemon assembleRelease
 

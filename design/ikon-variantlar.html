@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alifbo ikonlari</title>
+<style>
+  :root {
+    --bg: #f2f3f5; --card: #ffffff; --ink: #1b1e24; --muted: #6b7280; --line: #e5e7eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #0f1114; --card: #1a1d22; --ink: #f1f3f6; --muted: #9aa1ae; --line: #2a2e35; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; margin-bottom: 16px; }
+  .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .head h2 { font-size: 18px; margin: 0; }
+  .head span { color: var(--muted); font-size: 14px; }
+  .row { display: flex; gap: 18px; align-items: flex-end; flex-wrap: wrap; }
+  .mask { overflow: hidden; display: block; }
+  .circle { border-radius: 50%; }
+  .squircle { border-radius: 30%; }
+  .square { border-radius: 18%; }
+  .lbl { font-size: 12px; color: var(--muted); text-align: center; margin-top: 6px; }
+  .wall { display: flex; gap: 14px; padding: 14px; border-radius: 14px; margin-top: 14px; flex-wrap: wrap; }
+  .wall.light { background: linear-gradient(135deg, #e8eef9, #f7efe6); }
+  .wall.dark { background: linear-gradient(135deg, #10131a, #24283a); }
+  .app { width: 64px; text-align: center; font-size: 11px; }
+  .wall.light .app { color: #222; }
+  .wall.dark .app { color: #eee; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Alifbo — ikon g'oyalari</h1>
+  <p class="lead">Har g'oya telefon ekranidagi uch xil shaklda (doira, yumaloq kvadrat, burchakli) va kiçik ölçamda körsatilgan.</p>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#5B8CFF"/><stop offset="1" stop-color="#1F45C9"/>
+      </linearGradient>
+      <linearGradient id="g3" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#4F86FF"/><stop offset="1" stop-color="#2148D0"/>
+      </linearGradient>
+
+      <!-- 1. Ö tugma -->
+      <symbol id="i1" viewBox="18 18 72 72">
+        <rect width="108" height="108" fill="url(#g1)"/>
+        <rect x="29" y="31.5" width="50" height="50" rx="13" fill="#0F2A86" opacity="0.45"/>
+        <rect x="29" y="27" width="50" height="50" rx="13" fill="#FFFFFF"/>
+        <ellipse cx="54" cy="57.5" rx="10" ry="11.5" fill="none" stroke="#2148D0" stroke-width="6"/>
+        <circle cx="48.6" cy="38.6" r="3.3" fill="#2148D0"/>
+        <circle cx="59.4" cy="38.6" r="3.3" fill="#2148D0"/>
+      </symbol>
+
+      <!-- 2. Yangi to'rt harf: Ö Ğ Ş Ç -->
+      <symbol id="i2" viewBox="18 18 72 72">
+        <rect width="108" height="108" fill="#16213F"/>
+        <g fill="none" stroke="#16213F" stroke-linecap="round" stroke-linejoin="round">
+          <g transform="translate(28 28)">
+            <rect width="24" height="24" rx="6" fill="#FFFFFF" stroke="none"/>
+            <ellipse cx="12" cy="14.2" rx="5" ry="5.8" stroke-width="2.9"/>
+            <circle cx="9.4" cy="5.7" r="1.6" fill="#16213F" stroke="none"/>
+            <circle cx="14.6" cy="5.7" r="1.6" fill="#16213F" stroke="none"/>
+          </g>
+          <g transform="translate(56 28)">
+            <rect width="24" height="24" rx="6" fill="#FFFFFF" stroke="none"/>
+            <path d="M15.6 10.3 A5.2 6 0 1 0 17.2 14.6 H12.8" stroke-width="2.9"/>
+            <path d="M9.2 4.4 Q12 7.2 14.8 4.4" stroke-width="1.8"/>
+          </g>
+          <g transform="translate(28 56)">
+            <rect width="24" height="24" rx="6" fill="#FFB547" stroke="none"/>
+            <path d="M16 7.8 C15 6.3 13.6 5.6 12 5.6 C9.6 5.6 8.1 6.9 8.1 8.6 C8.1 12.3 16.1 10.6 16.1 14.5 C16.1 16.4 14.5 17.6 12.1 17.6 C10.2 17.6 8.7 16.8 7.9 15.6" stroke-width="2.7"/>
+            <path d="M12.1 17.8 v1.4 q2.3 0.2 1.9 1.7 q-0.4 1.2 -2.6 0.8" stroke-width="1.6"/>
+          </g>
+          <g transform="translate(56 56)">
+            <rect width="24" height="24" rx="6" fill="#FFFFFF" stroke="none"/>
+            <path d="M16 7.9 A5.2 6 0 1 0 16 15.4" stroke-width="2.9"/>
+            <path d="M12.3 17.7 v1.4 q2.3 0.2 1.9 1.7 q-0.4 1.2 -2.6 0.8" stroke-width="1.6"/>
+          </g>
+        </g>
+      </symbol>
+
+      <!-- 3. Yozuv: pufakcha ichida Ö va kursor -->
+      <symbol id="i3" viewBox="18 18 72 72">
+        <rect width="108" height="108" fill="#F3F6FF"/>
+        <path d="M38 30 H70 A12 12 0 0 1 82 42 V60 A12 12 0 0 1 70 72 H46 L34 81 L36 71.6 A12 12 0 0 1 26 60 V42 A12 12 0 0 1 38 30 Z" fill="url(#g3)"/>
+        <ellipse cx="52" cy="56" rx="8.6" ry="9.8" fill="none" stroke="#FFFFFF" stroke-width="5"/>
+        <circle cx="47.4" cy="40.2" r="2.9" fill="#FFFFFF"/>
+        <circle cx="56.6" cy="40.2" r="2.9" fill="#FFFFFF"/>
+        <path d="M71 33 Q72 39.5 78 40.5 Q72 41.5 71 48 Q70 41.5 64 40.5 Q70 39.5 71 33 Z" fill="#FFD34D"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <section class="card">
+    <div class="head"><h2>1. «Ö» tugmasi</h2><span>Klaviatura tugmasi va yangi alifboning eng ko'zga tashlanadigan harfi. Oddiy, kiçik ölçamda ham aniq.</span></div>
+    <div class="row" data-icon="i1"></div>
+  </section>
+
+  <section class="card">
+    <div class="head"><h2>2. Yangi to'rt harf</h2><span>Qonun bilan kirgan Ö Ğ Ş Ç — to'rtta tugmada. Mazmuni eng boy, lekin kiçik ölçamda harflar mayda.</span></div>
+    <div class="row" data-icon="i2"></div>
+  </section>
+
+  <section class="card">
+    <div class="head"><h2>3. Aqlli yozuv</h2><span>Xabar pufakchasi, «Ö» va yulduzça: keyingi sözni taklif qilib yozişni anglatadi.</span></div>
+    <div class="row" data-icon="i3"></div>
+  </section>
+</main>
+<script>
+  const shapes = [["circle", "doira"], ["squircle", "yumaloq"], ["square", "burchakli"]];
+  document.querySelectorAll(".row[data-icon]").forEach((row) => {
+    const id = row.dataset.icon;
+    const icon = (size, shape) =>
+      `<span class="mask ${shape}" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}"><use href="#${id}"/></svg></span>`;
+    row.innerHTML =
+      shapes.map(([s, name]) => `<div>${icon(112, s)}<div class="lbl">${name}</div></div>`).join("") +
+      `<div>${icon(48, "squircle")}<div class="lbl">48 px</div></div>` +
+      `<div>${icon(32, "circle")}<div class="lbl">32 px</div></div>`;
+    const walls = ["light", "dark"].map((w) =>
+      `<div class="wall ${w}">` +
+      ["Alifbo", "Telegram", "Kamera", "Xarita"].map((name, i) =>
+        `<div class="app">${i === 0 ? icon(52, "squircle") : `<span class="mask squircle" style="width:52px;height:52px;display:block;background:${["#2AABEE", "#444", "#34A853"][i - 1]}"></span>`}<div>${name}</div></div>`
+      ).join("") + `</div>`).join("");
+    row.insertAdjacentHTML("afterend", walls);
+  });
+</script>
+</body>
+</html>

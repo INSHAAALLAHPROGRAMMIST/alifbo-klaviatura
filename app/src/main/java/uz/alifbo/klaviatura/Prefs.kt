@@ -13,7 +13,7 @@ class Prefs(private val context: Context) {
     private fun bool(key: String, def: Boolean) = sp.getBoolean(key, def)
     private fun putBool(key: String, v: Boolean) = sp.edit().putBoolean(key, v).apply()
 
-    /** 0 = tizimga ergashadi, 1 = yorug', 2 = qorong'i, 3 = maxsus */
+    /** 0 = tizimga ergashadi, 1 = yorug', 2 = qorong'i, 3 = maxsus, 4..8 = tayyor temalar (Themes.choices) */
     var themeMode: Int
         get() = int("themeMode", 0)
         set(v) = putInt("themeMode", v)
@@ -88,11 +88,7 @@ class Prefs(private val context: Context) {
     fun theme(): KbTheme {
         val night = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
-        return when (themeMode) {
-            1 -> Themes.light
-            2 -> Themes.dark
-            3 -> Themes.custom(colorBg, colorKey, colorText, colorAccent)
-            else -> if (night) Themes.dark else Themes.light
-        }
+        if (themeMode == 3) return Themes.custom(colorBg, colorKey, colorText, colorAccent)
+        return Themes.preset(themeMode, night) ?: if (night) Themes.dark else Themes.light
     }
 }

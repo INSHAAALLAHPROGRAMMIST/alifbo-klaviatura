@@ -16,6 +16,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
@@ -34,7 +35,7 @@ class SettingsActivity : Activity() {
     private lateinit var step1Status: TextView
     private lateinit var step2Status: TextView
     private lateinit var customBox: LinearLayout
-    private val themeButtons = ArrayList<TextView>()
+    private val themeTiles = ArrayList<Pair<Int, ThemeSwatch>>()
     private val langButtons = ArrayList<TextView>()
     private var previewLang: Lang = Lang.UZ
 
@@ -66,8 +67,18 @@ class SettingsActivity : Activity() {
         scroll.addView(content, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         setContentView(scroll)
 
-        content.addView(label("Alifbo", 30f, ink, bold = true))
-        content.addView(label("Yangi özbek alifbosi uçun klaviatura", 14f, muted))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, LinearLayout.LayoutParams(dpi(56), dpi(56)))
+        val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(label("Alifbo", 28f, ink, bold = true))
+        titles.addView(label("Yangi özbek alifbosi uçun klaviatura", 14f, muted))
+        header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginStart = dpi(14)
+        })
+        content.addView(header)
 
         buildSetupCard()
         buildTryCard()
@@ -152,20 +163,30 @@ class SettingsActivity : Activity() {
 
     private fun buildThemeCard() {
         val c = card("Rang mavzusi")
-        val names = listOf("Tizim", "Yoruğ", "Qora", "Maxsus")
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        names.forEachIndexed { i, n ->
-            val b = chip(n) {
-                prefs.themeMode = i
-                customBox.visibility = if (i == 3) View.VISIBLE else View.GONE
-                refreshPreview()
+        // 3 ustunli to'r: har katakda kichik klaviatura ko'rinishi va nomi
+        var row: LinearLayout? = null
+        Themes.choices.forEachIndexed { i, (mode, name) ->
+            if (i % 3 == 0) {
+                row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                c.addView(row, lp().apply { if (i > 0) topMargin = dpi(10) })
             }
-            themeButtons.add(b)
-            row.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dpi(6)
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setOnClickListener {
+                    prefs.themeMode = mode
+                    customBox.visibility = if (mode == 3) View.VISIBLE else View.GONE
+                    refreshPreview()
+                }
+            }
+            val swatch = ThemeSwatch(this).apply { ring = accent }
+            tile.addView(swatch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpi(64)))
+            tile.addView(label(name, 13f, ink).apply { gravity = Gravity.CENTER }, lp().apply { topMargin = dpi(4) })
+            themeTiles.add(mode to swatch)
+            row?.addView(tile, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (i % 3 != 2) marginEnd = dpi(10)
             })
         }
-        c.addView(row)
 
         customBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -279,7 +300,16 @@ class SettingsActivity : Activity() {
             setColor(theme.background)
             cornerRadius = dp(14f)
         }
-        themeButtons.forEachIndexed { i, b -> styleChip(b, i == prefs.themeMode) }
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        for ((mode, swatch) in themeTiles) {
+            swatch.theme = if (mode == 3) {
+                Themes.custom(prefs.colorBg, prefs.colorKey, prefs.colorText, prefs.colorAccent)
+            } else {
+                Themes.preset(mode, night) ?: Themes.light
+            }
+            swatch.selectedTile = mode == prefs.themeMode
+        }
         langButtons.forEachIndexed { i, b -> styleChip(b, Lang.entries[i] == previewLang) }
     }
 

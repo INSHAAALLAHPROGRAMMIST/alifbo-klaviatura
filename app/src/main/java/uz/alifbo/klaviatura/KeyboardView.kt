@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.util.SparseArray
@@ -185,6 +186,12 @@ class KeyboardView(context: Context) : View(context) {
         }
     }
 
+    private val body = RectF()
+    private val shadowRect = RectF()
+    private val shadowDepth = dp(1.3f)
+    private val faceRegular: Typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    private val faceMedium: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
     private fun drawKey(canvas: Canvas, c: Cell, pressed: Boolean, hasNumberRow: Boolean) {
         val k = c.key
         val special = k.kind != Kind.CHAR && k.kind != Kind.SPACE
@@ -193,27 +200,39 @@ class KeyboardView(context: Context) : View(context) {
             special -> theme.keySpecial
             else -> theme.key
         }
+
+        // tugma ostidagi yupqa soya: bosilganda tugma unga "cho'kadi"
+        body.set(c.inner)
+        if (pressed) {
+            body.offset(0f, shadowDepth * 0.8f)
+        } else {
+            shadowRect.set(c.inner)
+            shadowRect.offset(0f, shadowDepth)
+            keyPaint.color = ColorUtils.blendARGB(theme.background, Color.BLACK, if (theme.isDark) 0.55f else 0.17f)
+            canvas.drawRoundRect(shadowRect, cornerPx, cornerPx, keyPaint)
+        }
         keyPaint.color = if (pressed) {
             if (k.kind == Kind.ENTER) ColorUtils.blendARGB(theme.accent, Color.BLACK, 0.2f) else theme.keyPressed
         } else base
-        canvas.drawRoundRect(c.inner, cornerPx, cornerPx, keyPaint)
+        canvas.drawRoundRect(body, cornerPx, cornerPx, keyPaint)
 
         val fg = when {
             k.kind == Kind.ENTER -> theme.accentText
+            k.kind == Kind.SHIFT && shift != Shift.OFF && casing -> theme.accent
             special -> theme.textSpecial
             else -> theme.text
         }
-        val cx = c.inner.centerX()
-        val cy = c.inner.centerY()
-        val iconSize = minOf(keyHeightPx * 0.40f, c.inner.width() * 0.62f) * textScale.coerceAtMost(1.15f)
+        val cx = body.centerX()
+        val cy = body.centerY()
+        val iconSize = minOf(keyHeightPx * 0.40f, body.width() * 0.62f) * textScale.coerceAtMost(1.15f)
         iconPaint.color = fg
 
         when (k.kind) {
-            Kind.CHAR -> drawLabel(canvas, labelFor(k), c, fg, keyHeightPx * 0.40f * textScale)
+            Kind.CHAR -> drawLabel(canvas, labelFor(k), body, fg, keyHeightPx * 0.42f * textScale, faceRegular)
             Kind.TO_SYM1, Kind.TO_SYM2, Kind.TO_LETTERS ->
-                drawLabel(canvas, k.label, c, fg, keyHeightPx * 0.27f * textScale)
-            Kind.SPACE -> drawLabel(canvas, langName, c, theme.hint, keyHeightPx * 0.25f * textScale)
-            Kind.SHIFT -> Icons.shift(canvas, iconPaint, cx, cy, iconSize, shift)
+                drawLabel(canvas, k.label, body, fg, keyHeightPx * 0.27f * textScale, faceMedium)
+            Kind.SPACE -> drawSpace(canvas, body)
+            Kind.SHIFT -> Icons.shift(canvas, iconPaint, cx, cy, iconSize, if (casing) shift else Shift.OFF)
             Kind.DELETE -> Icons.delete(canvas, iconPaint, cx, cy, iconSize)
             Kind.ENTER -> Icons.enter(canvas, iconPaint, cx, cy, iconSize, enterStyle)
             Kind.LANGUAGE -> Icons.globe(canvas, iconPaint, cx, cy, iconSize)
@@ -225,21 +244,36 @@ class KeyboardView(context: Context) : View(context) {
             val d = k.popup.firstOrNull()
             if (d != null && d.length == 1 && d[0].isDigit()) {
                 textPaint.color = theme.hint
+                textPaint.typeface = faceRegular
                 textPaint.textSize = keyHeightPx * 0.2f * textScale
-                canvas.drawText(d, c.inner.right - dp(6f), c.inner.top + textPaint.textSize + dp(1f), textPaint)
+                canvas.drawText(d, body.right - dp(6f), body.top + textPaint.textSize + dp(1f), textPaint)
             }
         }
     }
 
-    private fun drawLabel(canvas: Canvas, text: String, c: Cell, color: Int, size: Float) {
+    /** Probel: til nomi va (bir nechta til bo'lsa) yonga surib almashtirish belgilari. */
+    private fun drawSpace(canvas: Canvas, r: RectF) {
+        drawLabel(canvas, langName, r, theme.hint, keyHeightPx * 0.25f * textScale, faceMedium)
+        if (langShorts.size < 2 || r.width() < dp(120f)) return
+        textPaint.color = ColorUtils.setAlphaComponent(theme.hint, 140)
+        textPaint.typeface = faceRegular
+        textPaint.textSize = keyHeightPx * 0.32f
+        val fm = textPaint.fontMetrics
+        val y = r.centerY() - (fm.ascent + fm.descent) / 2f
+        canvas.drawText("‹", r.left + dp(16f), y, textPaint)
+        canvas.drawText("›", r.right - dp(16f), y, textPaint)
+    }
+
+    private fun drawLabel(canvas: Canvas, text: String, r: RectF, color: Int, size: Float, face: Typeface) {
         if (text.isEmpty()) return
         textPaint.color = color
+        textPaint.typeface = face
         textPaint.textSize = size
-        val avail = c.inner.width() - dp(6f)
+        val avail = r.width() - dp(6f)
         val w = textPaint.measureText(text)
         if (w > avail && w > 0f) textPaint.textSize = size * avail / w
         val fm = textPaint.fontMetrics
-        canvas.drawText(text, c.inner.centerX(), c.inner.centerY() - (fm.ascent + fm.descent) / 2f, textPaint)
+        canvas.drawText(text, r.centerX(), r.centerY() - (fm.ascent + fm.descent) / 2f, textPaint)
     }
 
     // ---------------------------------------------------------------- teginish
@@ -433,7 +467,7 @@ class KeyboardView(context: Context) : View(context) {
 
     private fun showPreview(cell: Cell) {
         val ov = overlay ?: return
-        ov.showPreview(toOverlay(cell.outer), labelFor(cell.key), keyHeightPx)
+        ov.showPreview(toOverlay(cell.inner), labelFor(cell.key), keyHeightPx, cornerPx)
     }
 
     private fun toOverlay(r: RectF): RectF {

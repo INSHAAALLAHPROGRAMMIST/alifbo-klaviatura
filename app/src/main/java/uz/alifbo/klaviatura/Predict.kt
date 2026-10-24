@@ -3,20 +3,26 @@ package uz.alifbo.klaviatura
 import java.util.Locale
 import kotlin.math.ln
 
-/** [prefix] — kursordan oldingi yozilayotgan so'z; [prev] — undan oldingi so'z (START = gap boshi, null = noma'lum). */
-data class TextContext(val prefix: String, val prev: String?)
+/**
+ * [prefix] — kursordan oldingi yozilayotgan so'z; [prev] — undan oldingi so'z (START = gap boshi, null = noma'lum);
+ * [history] — oldingi so'zlar eskidan yangiga (eng ko'pi 4 ta, gap boshi bo'lsa birinchisi START).
+ */
+data class TextContext(val prefix: String, val prev: String?, val history: List<String> = listOfNotNull(prev))
 
 enum class CapStyle { NONE, FIRST, ALL }
 
 object ContextParser {
     const val START = LanguageModel.START
+    const val MAX_HISTORY = 4
 
     private fun isApos(c: Char): Boolean =
         c == '\'' || c == '‘' || c == '’' || c == 'ʻ' || c == 'ʼ'
 
     fun isWordChar(c: Char): Boolean = c.isLetter() || isApos(c)
 
-    /** Kursordan oldingi matndan yozilayotgan so'z va undan oldingi so'zni ajratadi. */
+    private fun isTerminator(c: Char): Boolean = c == '.' || c == '!' || c == '?' || c == '…' || c == '\n'
+
+    /** Kursordan oldingi matndan yozilayotgan so'z va undan oldingi (eng ko'pi 4 ta) so'zni ajratadi. */
     fun parse(before: CharSequence): TextContext {
         var i = before.length
         while (i > 0 && isWordChar(before[i - 1])) i--
@@ -24,8 +30,13 @@ object ContextParser {
         while (start < before.length && isApos(before[start])) start++
         val prefix = before.substring(start)
 
+        val newestFirst = ArrayList<String>(MAX_HISTORY)
         var j = i
-        while (j > 0) {
+        scan@ while (newestFirst.size < MAX_HISTORY) {
+            if (j == 0) {
+                newestFirst.add(START)
+                break
+            }
             val c = before[j - 1]
             when {
                 isWordChar(c) -> {
@@ -34,20 +45,26 @@ object ContextParser {
                     var ws = k
                     while (ws < j && isApos(before[ws])) ws++
                     val w = before.substring(ws, j)
-                    return TextContext(prefix, if (w.isEmpty()) null else w)
+                    if (w.isEmpty()) break@scan
+                    newestFirst.add(w)
+                    j = k
                 }
-                c == '.' || c == '!' || c == '?' || c == '…' || c == '\n' -> return TextContext(prefix, START)
-                c.isDigit() -> return TextContext(prefix, null)
+                isTerminator(c) -> {
+                    newestFirst.add(START)
+                    break@scan
+                }
+                c.isDigit() -> break@scan
                 else -> j--
             }
         }
-        return TextContext(prefix, START)
+        return TextContext(prefix, newestFirst.firstOrNull(), newestFirst.asReversed().toList())
     }
 }
 
 object Norm {
     /** Modelda saqlanadigan ko'rinish: kichik harf, apostrof turlari birlashtirilgan. */
     fun word(raw: String, lang: Lang): String {
+        if (raw == ContextParser.START) return raw
         val s = raw.lowercase(Locale.ROOT)
         return when (lang) {
             Lang.UZ -> buildString(s.length) {
@@ -70,8 +87,26 @@ class Suggester(
 ) {
     fun suggest(ctx: TextContext, cap: CapStyle, max: Int = 3): List<String> {
         val prefix = Norm.word(ctx.prefix, lang)
-        val prev = ctx.prev?.let { if (it == ContextParser.START) it else Norm.word(it, lang) }
-        val prevIdx = if (prev != null) model.indexOf(prev) else -1
+        val hist = ctx.history.map { Norm.word(it, lang) }
+
+        // modeldagi kontekst: lug'atda yo'q so'zdan keyingi qismi (noma'lum so'z kontekstni uzadi)
+        val ids = ArrayList<Int>(hist.size)
+        for (w in hist) {
+            val id = model.indexOf(w)
+            if (id < 0) ids.clear() else ids.add(id)
+        }
+        // har tartib uchun (kontekst uzunligi + 1) -> (so'z id -> kuch)
+        val byOrder = ArrayList<Pair<Int, HashMap<Int, Int>>>()
+        for (len in 1..minOf(ids.size, model.maxOrder - 1)) {
+            val c = IntArray(len) { ids[ids.size - len + it] }
+            val m = HashMap<Int, Int>()
+            if (model.next(c) { id, q -> m[id] = q }) byOrder.add(len + 1 to m)
+        }
+        // shaxsiy kontekstlar: oxirgi 1..4 so'z
+        val personalCtx = (1..minOf(hist.size, ContextParser.MAX_HISTORY)).map { k ->
+            k to hist.subList(hist.size - k, hist.size).joinToString(" ")
+        }
+
         val scores = HashMap<String, Double>()
 
         fun add(word: String, s: Double) {
@@ -79,14 +114,20 @@ class Suggester(
         }
 
         if (prefix.isEmpty()) {
-            if (prevIdx >= 0) {
-                for (k in 0 until model.nextCount(prevIdx)) {
-                    val id = model.nextId(prevIdx, k)
-                    add(model.word(id), 100.0 + model.nextQuant(prevIdx, k) + model.uni(id) * 0.2)
+            // uzunroq mos kelgan kontekst kuchliroq: 2 so'z -> 100, 3 -> 200, 4 -> 300, 5 -> 400
+            for ((order, m) in byOrder) {
+                for ((id, q) in m) {
+                    val w = model.word(id)
+                    if (w == ContextParser.START) continue
+                    add(w, 100.0 * (order - 1) + q + if (order == 2) model.uni(id) * 0.2 else 0.0)
                 }
             }
             // shaxsiy odat katta korpusdagi umumiy statistikadan kuchliroq bo'lsin
-            personal?.next(prev)?.forEach { (w, c) -> if (trusted(w, c)) add(w, 150.0 + 30.0 * log2(c + 1.0)) }
+            for ((k, key) in personalCtx) {
+                personal?.next(key)?.forEach { (w, c) ->
+                    if (trusted(w, c)) add(w, 150.0 + 40.0 * (k - 1) + 30.0 * log2(c + 1.0))
+                }
+            }
             if (scores.size < max) {
                 for (id in model.topUnigrams) {
                     val w = model.word(id)
@@ -99,16 +140,19 @@ class Suggester(
                 val w = model.word(i)
                 if (w != prefix && w != ContextParser.START) {
                     var s = model.uni(i).toDouble()
-                    if (prevIdx >= 0) {
-                        val bq = model.bigramQuant(prevIdx, i)
-                        if (bq > 0) s += 60.0 + bq
-                    }
+                    for ((order, m) in byOrder) m[i]?.let { s += 60.0 * (order - 1) + it }
                     add(w, s)
                 }
                 i++
             }
-            personal?.withPrefix(prefix)?.forEach { (w, c) ->
-                if (w != prefix && trusted(w, c)) add(w, 120.0 + 25.0 * log2(c + 1.0))
+            val pm = personal
+            if (pm != null) {
+                for ((w, c) in pm.withPrefix(prefix)) {
+                    if (w == prefix || !trusted(w, c)) continue
+                    var s = 120.0 + 25.0 * log2(c + 1.0)
+                    for ((k, key) in personalCtx) pm.next(key)?.get(w)?.let { s += 40.0 * k }
+                    add(w, s)
+                }
             }
         }
 

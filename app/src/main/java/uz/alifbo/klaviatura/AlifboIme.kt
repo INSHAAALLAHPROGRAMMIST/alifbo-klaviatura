@@ -252,7 +252,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
             if (ctx.prefix.isNotEmpty()) ic.deleteSurroundingText(ctx.prefix.length, 0)
             ic.commitText("$word ", 1)
             ic.endBatchEdit()
-            learnWord(ctx.prev, word)
+            learnWord(ctx.history, word)
         } catch (t: Throwable) {
             return
         }
@@ -265,20 +265,20 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         try {
             val before = ic.getTextBeforeCursor(80, 0) ?: return
             val ctx = ContextParser.parse(before)
-            learnWord(ctx.prev, ctx.prefix)
+            learnWord(ctx.history, ctx.prefix)
         } catch (t: Throwable) {
             // o'rganish yozishga xalaqit bermasligi kerak
         }
     }
 
-    private fun learnWord(prevRaw: String?, wordRaw: String) {
+    private fun learnWord(historyRaw: List<String>, wordRaw: String) {
         if (!learnOn) return
         val lang = langs[langIdx]
         val w = Norm.word(wordRaw, lang)
         if (w.length < 2 || w.length > 30 || !w.all { ContextParser.isWordChar(it) }) return
-        val prev = prevRaw?.let { if (it == ContextParser.START) it else Norm.word(it, lang) }
+        val history = historyRaw.map { Norm.word(it, lang) }
         val pm = personalFor(lang)
-        pm.learn(prev, w)
+        pm.learn(history, w)
         if (pm.pending >= 40) savePersonal()
     }
 

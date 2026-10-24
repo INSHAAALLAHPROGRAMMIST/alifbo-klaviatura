@@ -19,10 +19,17 @@ class PersonalModel {
 
     val wordCount: Int get() = uni.size
 
-    fun learn(prev: String?, word: String) {
+    fun learn(prev: String?, word: String) = learn(listOfNotNull(prev), word)
+
+    /**
+     * [history] — oldingi so'zlar eskidan yangiga. Oxirgi 1..4 so'z alohida kontekst sifatida eslab qolinadi
+     * (kalit — so'zlar bo'sh joy bilan birlashtirilgan), shunda uzun iboralarni ham o'rganadi.
+     */
+    fun learn(history: List<String>, word: String) {
         uni[word] = (uni[word] ?: 0) + 1
-        if (prev != null) {
-            val row = big.getOrPut(prev) { HashMap() }
+        for (k in 1..minOf(history.size, MAX_CONTEXT)) {
+            val key = history.subList(history.size - k, history.size).joinToString(" ")
+            val row = big.getOrPut(key) { HashMap() }
             row[word] = (row[word] ?: 0) + 1
         }
         dirty = true
@@ -77,10 +84,11 @@ class PersonalModel {
     }
 
     companion object {
+        private const val MAX_CONTEXT = 4
         private const val MAX_WORDS = 20000
         private const val KEEP_WORDS = 15000
-        private const val MAX_PAIRS = 40000
-        private const val KEEP_PAIRS = 30000
+        private const val MAX_PAIRS = 100000
+        private const val KEEP_PAIRS = 75000
 
         fun parse(text: String): PersonalModel {
             val m = PersonalModel()

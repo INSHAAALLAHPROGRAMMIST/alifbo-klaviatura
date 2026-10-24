@@ -1,14 +1,27 @@
 name: models
 
-# Katta korpusdan tahmin modellarini yasaydi va artefakt sifatida beradi.
+# Katta korpusdan tahmin modellarini yasaydi (har til alohida serverda, parallel) va artefakt sifatida beradi.
 # Qo'lda ishga tushiriladi; natijani tekshirib, app/src/main/assets ga qo'shamiz.
 on:
   workflow_dispatch:
+    inputs:
+      kitoblar:
+        description: "UzBooks (lat) fayllari soni, 0 = kitobsiz (har biri ~275 MB, ~1400 kitob)"
+        default: "0"
+        required: false
+      tartib:
+        description: "Eng uzun ibora: 2 = 1 oldingi so'z ... 5 = 4 oldingi so'z"
+        default: "5"
+        required: false
 
 jobs:
-  models:
+  model:
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [uz, uzc, en, ru]
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -16,54 +29,76 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Korpuslarni yuklab olish
+      - name: O'zbek korpusi (UzCrawl + UzBooks badiiy)
+        if: matrix.lang == 'uz' || matrix.lang == 'uzc'
+        env:
+          KITOBLAR: ${{ inputs.kitoblar }}
         run: |
           mkdir -p corpus
+          pip install --quiet pyarrow
           HF=https://huggingface.co/datasets/tahrirchi/uz-crawl/resolve/main/data
           curl -L --fail --retry 3 -sS -o corpus/tg.parquet "$HF/telegram_blogs-00000-of-00001.parquet"
           curl -L --fail --retry 3 -sS -o corpus/news.parquet "$HF/news-00002-of-00007.parquet"
-          curl -L --fail --retry 3 -sS -o corpus/eng.tsv.bz2 https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2
-          curl -L --fail --retry 3 -sS -o corpus/rus.tsv.bz2 https://downloads.tatoeba.org/exports/per_language/rus/rus_sentences.tsv.bz2
-          ls -la corpus
-
-      - name: Matnga aylantirish
-        run: |
-          pip install --quiet pyarrow
           python3 tools/parquet-to-text.py corpus/tg.parquet corpus/uz_tg.txt
           python3 tools/parquet-to-text.py corpus/news.parquet corpus/uz_news.txt
-          bzcat corpus/eng.tsv.bz2 | cut -f3 > corpus/en.txt
-          bzcat corpus/rus.tsv.bz2 | cut -f3 > corpus/ru.txt
-          rm -f corpus/*.parquet corpus/*.bz2
+          rm -f corpus/*.parquet
+          BOOKS=https://huggingface.co/datasets/tahrirchi/uz-books/resolve/main/data
+          for ((i = 0; i < ${KITOBLAR:-0}; i++)); do
+            f=$(printf "lat-%05d-of-00028.parquet" "$i")
+            curl -L --fail --retry 3 -sS -o corpus/book.parquet "$BOOKS/$f"
+            python3 tools/parquet-to-text.py corpus/book.parquet "corpus/uz_books_$i.txt" --fiction
+            rm -f corpus/book.parquet
+          done
           wc -l corpus/*.txt
           du -h corpus/*.txt
 
-      - name: Modellarni yasash
+      - name: Tatoeba korpusi
+        if: matrix.lang == 'en' || matrix.lang == 'ru'
+        run: |
+          mkdir -p corpus
+          code=$([ "${{ matrix.lang }}" = en ] && echo eng || echo rus)
+          curl -L --fail --retry 3 -sS -o corpus/t.tsv.bz2 "https://downloads.tatoeba.org/exports/per_language/$code/${code}_sentences.tsv.bz2"
+          bzcat corpus/t.tsv.bz2 | cut -f3 > "corpus/${{ matrix.lang }}.txt"
+          rm -f corpus/t.tsv.bz2
+          wc -l corpus/*.txt
+
+      - name: Modelni yasash
         env:
           NODE_OPTIONS: "--max-old-space-size=12288"
         run: |
           mkdir -p models
-          UZ="corpus/uz_tg.txt corpus/uz_news.txt tools/seed/uz.txt"
-          node tools/build-model.mjs --lang uz  --in $UZ --out models/lm_uz.bin  --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
-          node tools/build-model.mjs --lang uzc --in $UZ --out models/lm_uzc.bin --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
-          # Tatoeba gaplarining ko'pi "Tom", "Mary" haqida: ularni susaytiramiz
-          node tools/build-model.mjs --lang en  --in corpus/en.txt tools/seed/en.txt --out models/lm_en.bin --max-vocab 40000 --min-count 2 --min-bigram 2 --damp tom,tom's,mary,mary's,sami,sami's,layla,layla's,john,john's,ken,jack,ziri,ziri's,yanni,yanni's,rima,rima's,skura,skura's,mennad,mennad's,baya,baya's | tee -a models/stats.txt
-          node tools/build-model.mjs --lang ru  --in corpus/ru.txt tools/seed/ru.txt --out models/lm_ru.bin --max-vocab 50000 --min-count 2 --min-bigram 2 --damp том,тома,тому,томом,томе,мэри,сами,лейла,лейлы,лейле,лейлу,джон,джона,кен,джек,зири,янни,рима,скура,меннад | tee -a models/stats.txt
+          L=${{ matrix.lang }}
+          case $L in
+            uz|uzc)
+              IN="corpus/uz_tg.txt corpus/uz_news.txt $(ls corpus/uz_books_*.txt 2>/dev/null | tr '\n' ' ') tools/seed/uz.txt"
+              ARGS="--max-vocab 60000 --min-count 3 --min-bigram 2 --keep3 120000 --keep4 60000 --keep5 30000" ;;
+            en)
+              IN="corpus/en.txt tools/seed/en.txt"
+              ARGS="--max-vocab 40000 --min-count 2 --min-bigram 2 --keep3 60000 --keep4 30000 --keep5 15000 --damp tom,tom's,mary,mary's,sami,sami's,layla,layla's,john,john's,ken,jack,ziri,ziri's,yanni,yanni's,rima,rima's,skura,skura's,mennad,mennad's,baya,baya's" ;;
+            ru)
+              IN="corpus/ru.txt tools/seed/ru.txt"
+              ARGS="--max-vocab 50000 --min-count 2 --min-bigram 2 --keep3 60000 --keep4 30000 --keep5 15000 --damp том,тома,тому,томом,томе,мэри,сами,лейла,лейлы,лейле,лейлу,джон,джона,кен,джек,зири,янни,рима,скура,меннад" ;;
+          esac
+          node tools/build-model.mjs --lang "$L" --in $IN --out "models/lm_$L.bin" --max-order "${{ inputs.tartib }}" --ctx-min 5 $ARGS | tee "models/stats_$L.txt"
 
       - name: Tekshirish
         run: |
-          for l in uz uzc en ru; do node tools/query-model.mjs models/lm_$l.bin --check; done
+          L=${{ matrix.lang }}
+          M="models/lm_$L.bin"
           {
-            echo "--- uz";  node tools/query-model.mjs models/lm_uz.bin --next '<s>' --prefix yax
-            node tools/query-model.mjs models/lm_uz.bin --next men --prefix ö
-            node tools/query-model.mjs models/lm_uz.bin --next bugun --prefix kit
-            echo "--- uzc"; node tools/query-model.mjs models/lm_uzc.bin --next мен --prefix ях
-            echo "--- en";  node tools/query-model.mjs models/lm_en.bin --next i --prefix thi
-            echo "--- ru";  node tools/query-model.mjs models/lm_ru.bin --next я --prefix хо
-          } | tee -a models/stats.txt
+            node tools/query-model.mjs "$M" --check
+            case $L in
+              uz)  node tools/query-model.mjs "$M" --next '<s>' --ctx "men bugun" --prefix yax
+                   node tools/query-model.mjs "$M" --ctx "assalomu alaykum" ;;
+              uzc) node tools/query-model.mjs "$M" --next '<s>' --ctx "мен бугун" --prefix ях ;;
+              en)  node tools/query-model.mjs "$M" --next '<s>' --ctx "i want" --prefix thi ;;
+              ru)  node tools/query-model.mjs "$M" --next '<s>' --ctx "я хочу" --prefix хо ;;
+            esac
+          } | tee -a "models/stats_$L.txt"
           ls -la models
 
       - uses: actions/upload-artifact@v4
         with:
-          name: alifbo-models
+          name: model-${{ matrix.lang }}
           path: models/
           if-no-files-found: error

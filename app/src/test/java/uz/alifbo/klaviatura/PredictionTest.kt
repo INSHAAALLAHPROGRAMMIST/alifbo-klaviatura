@@ -179,6 +179,49 @@ class PredictionTest {
     }
 
     @Test
+    fun kontekst_tortTagachaOldingiSoz() {
+        var c = ContextParser.parse("Men bugun uyga k")
+        assertEquals("k", c.prefix)
+        assertEquals(listOf(ContextParser.START, "Men", "bugun", "uyga"), c.history)
+
+        c = ContextParser.parse("bir ikki uch tört besh o")
+        assertEquals(listOf("ikki", "uch", "tört", "besh"), c.history)
+
+        c = ContextParser.parse("Salom. Men ")
+        assertEquals(listOf(ContextParser.START, "Men"), c.history)
+
+        c = ContextParser.parse("12 bu ")
+        assertEquals(listOf("bu"), c.history)
+    }
+
+    private fun fixture(): LanguageModel =
+        LanguageModel.parse(File("src/test/resources/alm2_seed_uz.bin").readBytes())
+
+    @Test
+    fun alm2_uzunKontekstTaklifniOzgartiradi() {
+        val m = fixture()
+        assertTrue("maxOrder ${m.maxOrder}", m.maxOrder >= 3)
+        val s = Suggester(m, null, Lang.UZ)
+        // faqat "bugun" ga qarasak: bigram jadvali ("biz" ham bor)
+        val one = s.suggest(TextContext("", "bugun", listOf("bugun")), CapStyle.NONE, 3)
+        assertTrue("$one", one.contains("biz"))
+        // "Men bugun" ga qarasak: faqat shu iboradan keyin kelgan so'zlar
+        val two = s.suggest(ContextParser.parse("Men bugun "), CapStyle.NONE, 3)
+        val allowed = setOf("bozorga", "i${cp(0x15F)}ga", "i${cp(0x15F)}ladim", "uyga")
+        assertTrue("$two", two.size == 3 && two.all { it in allowed })
+    }
+
+    @Test
+    fun shaxsiyOrganish_uzunKontekst() {
+        val p = PersonalModel()
+        repeat(2) { p.learn(listOf("zzqx1", "zzqumumiy"), "zzqaaa") }
+        repeat(2) { p.learn(listOf("zzqx2", "zzqumumiy"), "zzqbbb") }
+        val s = Suggester(fixture(), p, Lang.UZ)
+        assertEquals("zzqaaa", s.suggest(TextContext("", "zzqumumiy", listOf("zzqx1", "zzqumumiy")), CapStyle.NONE, 3).first())
+        assertEquals("zzqbbb", s.suggest(TextContext("", "zzqumumiy", listOf("zzqx2", "zzqumumiy")), CapStyle.NONE, 3).first())
+    }
+
+    @Test
     fun shaxsiyModel_saqlashVaOqish() {
         val p = PersonalModel()
         p.learn("<s>", "salom")

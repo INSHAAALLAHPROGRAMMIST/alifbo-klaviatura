@@ -40,7 +40,9 @@ Probelni yonga surişş — tilni almaştiradi; glob tugmasini uzoq bosiş — t
 Klaviatura tepasidagi qatorda 3 ta taklif: eng yaxşisi o'rtada. Yozilayotgan sözni tugatadi,
 söz tugagaç keyingisini taklif qiladi. Hammasi oflayn:
 
-- `app/src/main/assets/lm_<til>.bin` — tayyor model (ALM1): lug'at, chastota, keyingi söz jadvali.
+- `app/src/main/assets/lm_<til>.bin` — tayyor model (ALM2): lug'at, chastota, keyingi söz jadvali
+  va 2–4 oldingi sözli kontekst jadvallari (uzunroq mos kelgan ibora ustun turadi; quyi tartib bilan
+  bir xil natija beradigan kontekstlar saqlanmaydi).
   `tools/build-model.mjs` matn korpusidan yasaydi, `tools/query-model.mjs` mustaqil tekşiradi.
   Özbek kirill modeli lotin matndan transliteratsiya orqali yasaladi (`tools/translit.mjs`).
 - Katta modellar GitHub Actions'da (`.github/workflows/models.yml`, qö'lda işga tuşiriladi) yasaladi:

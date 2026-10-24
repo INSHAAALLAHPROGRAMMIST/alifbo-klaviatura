@@ -1,6 +1,8 @@
-# Alifbo — yangi özbek alifbosi uçun Android klaviatura
+# Söz — yangi özbek alifbosi uçun aqlli Android klaviatura
 
 Tizim klaviaturasi (`InputMethodService`): Telegram'da, brauzerda, SMS'da — har qanday ilovada işlaydi.
+Ilova nomi «Söz»; ichki identifikator (`uz.alifbo.klaviatura`) va repo nomi özgarmagan, şuning uçun
+yangi versiyalar avvalgisining ustidan örnatilaveradi.
 
 ## Alifbo
 
@@ -29,9 +31,9 @@ Probelni yonga surişş — tilni almaştiradi; glob tugmasini uzoq bosiş — t
 
 ## Xavfsizlik
 
-- `AndroidManifest.xml`'da **hec qanday** `uses-permission` yöq (INTERNET ham). Tayyor APK'da faqat
+- `AndroidManifest.xml`'da **heç qanday** `uses-permission` yöq (INTERNET ham). Tayyor APK'da faqat
   androidx qö'shadigan ichki `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` çiqadi: u ilovaning özi uçun,
-  foydalanuvchidan hec narsa so'ramaydi va tarmoqqa aloqasi yöq.
+  foydalanuvchidan heç narsa söramaydi va tarmoqqa aloqasi yöq.
   CI har yig'işda `aapt2 dump permissions` bilan tekşiradi va INTERNET çiqsa to'xtaydi.
 - `allowBackup=false`; sozlamalar faqat ilovaning özida (SharedPreferences).
 
@@ -51,6 +53,9 @@ söz tugagaç keyingisini taklif qiladi. Hammasi oflayn:
   birinçi 4 fayli, `--fiction` filtri bilan faqat badiiy kitoblar va şeirlar, ~64 mln söz),
   inglizça va ruscha — [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR). Natija artefakt bölib
   çiqadi, tekşirilgaç `app/src/main/assets/` ga qö'şiladi. `tools/seed/` — kiçik boşlang'ich matnlar.
+- Eski yozuvdan yordam (sozlamada öçiriladi): yangi alifboga könikkunça `s` yozilsa `ş` bilan
+  boşlanadigan sözlar ham taklif qilinadi (`o → ö`, `g → ğ`), eski odatdagi `sh`, `oʼ`, `gʼ` esa
+  `ş`, `ö`, `ğ` deb tuşuniladi. Almaştirilgan har harf uçun kiçik jarima bor.
 - Shaxsiy örganiş: siz yozgan sözlar `files/personal_<til>.txt` da, faqat telefonda.
   Parol, email, havola va "taklifsiz" maydonlarda tahmin ham, örganiş ham öçiq.
 
@@ -68,7 +73,7 @@ Rasmlar telefonning özidagi emoji şrifti bilan çiziladi. Emoji Unicode belgis
 
 ## Qurişi
 
-Kompyuterga hec nima örnatilmaydi: GitHub Actions (`.github/workflows/build.yml`) testlarni işlatadi,
+Kompyuterga heç nima örnatilmaydi: GitHub Actions (`.github/workflows/build.yml`) testlarni işlatadi,
 imzolangan APK yig'adi va artefakt sifatida beradi. Imzo kaliti repoda emas, GitHub sirlarida
 (`KEYSTORE_B64`, `KEYSTORE_PASSWORD`); nusxasi kompyuterda `klaviatura-kalit` papkasida.
 

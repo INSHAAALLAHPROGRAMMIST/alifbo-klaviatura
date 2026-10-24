@@ -73,8 +73,8 @@ class SettingsActivity : Activity() {
         }
         header.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, LinearLayout.LayoutParams(dpi(56), dpi(56)))
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        titles.addView(label("Alifbo", 28f, ink, bold = true))
-        titles.addView(label("Yangi özbek alifbosi uçun klaviatura", 14f, muted))
+        titles.addView(label(getString(R.string.app_name), 28f, ink, bold = true))
+        titles.addView(label("Yangi özbek alifbosi uçun aqlli klaviatura", 14f, muted))
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = dpi(14)
         })
@@ -218,10 +218,18 @@ class SettingsActivity : Activity() {
         val c = card("Söz tahmini")
         switchRow(c, "Tahmin qatori", prefs.predict) { prefs.predict = it }
         switchRow(c, "Shaxsiy örganiş", prefs.learn) { prefs.learn = it }
+        switchRow(c, "Eski yozuvdan yordam", prefs.oldSpellingHelp) { prefs.oldSpellingHelp = it }
+        c.addView(
+            label(
+                "Yangi alifboga könikkunça: «s» yozsangiz «ş» bilan boşlanadigan sözlar ham taklif qilinadi " +
+                    "(o → ö, g → ğ ham), eski odat bilan yozilgan sh, oʼ, gʼ esa ş, ö, ğ deb tuşuniladi.",
+                12f, muted,
+            ),
+        )
         c.addView(
             label(
                 "Örganilgan sözlar faqat telefoningizda saqlanadi. Parol, email va havola " +
-                    "maydonlarida klaviatura hec narsa örganmaydi va taklif körsatmaydi.",
+                    "maydonlarida klaviatura heç narsa örganmaydi va taklif körsatmaydi.",
                 12f, muted,
             ),
             lp().apply { topMargin = dpi(6) },

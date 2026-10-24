@@ -80,12 +80,68 @@ object Norm {
     }
 }
 
+/**
+ * Yangi alifboga o'tish davri uchun yordam: eski odat bilan yozilgan prefiksning yangi alifbodagi variantlari.
+ * s -> ş, o -> ö, g -> ğ, c -> ç, shuningdek sh -> ş, ch -> ç, oʼ -> ö, gʼ -> ğ.
+ * Faqat davomi bor (lug'atda shunday boshlanadigan so'z bor) variantlar qaytariladi.
+ */
+object OldSpelling {
+    private const val MAX_VARIANTS = 32
+    private const val TUTUQ = 'ʼ'
+
+    /** (variant, almashtirishlar soni); birinchisi — yozilganning o'zi (agar davomi bo'lsa). */
+    fun variants(prefix: String, exists: (String) -> Boolean): List<Pair<String, Int>> {
+        val out = ArrayList<Pair<String, Int>>()
+        val sb = StringBuilder()
+
+        fun go(i: Int, subs: Int) {
+            if (out.size >= MAX_VARIANTS) return
+            if (sb.isNotEmpty() && !exists(sb.toString())) return
+            if (i == prefix.length) {
+                out.add(sb.toString() to subs)
+                return
+            }
+            val c = prefix[i]
+            val n = if (i + 1 < prefix.length) prefix[i + 1] else '\u0000'
+
+            fun branch(s: String, next: Int, add: Int) {
+                val len = sb.length
+                sb.append(s)
+                go(next, subs + add)
+                sb.setLength(len)
+            }
+
+            branch(c.toString(), i + 1, 0)
+            when {
+                c == 's' && n == 'h' -> branch("ş", i + 2, 1)
+                c == 'c' && n == 'h' -> branch("ç", i + 2, 1)
+                c == 'o' && n == TUTUQ -> branch("ö", i + 2, 1)
+                c == 'g' && n == TUTUQ -> branch("ğ", i + 2, 1)
+            }
+            when (c) {
+                's' -> branch("ş", i + 1, 1)
+                'o' -> branch("ö", i + 1, 1)
+                'g' -> branch("ğ", i + 1, 1)
+                'c' -> branch("ç", i + 1, 1)
+            }
+        }
+
+        go(0, 0)
+        return out
+    }
+}
+
 class Suggester(
     private val model: LanguageModel,
     private val personal: PersonalModel?,
     private val lang: Lang,
 ) {
-    fun suggest(ctx: TextContext, cap: CapStyle, max: Int = 3): List<String> {
+    /**
+     * [fuzzy] — eski yozuvdan yordam (faqat yangi o'zbek lotinida): "s" yozilsa "ş" bilan boshlanadigan
+     * so'zlar ham taklif qilinadi va h.k. Almashtirilgan har harf uchun kichik jarima bor, shuning uchun
+     * yozilganga aynan mos so'z teng holatda oldinda turadi.
+     */
+    fun suggest(ctx: TextContext, cap: CapStyle, max: Int = 3, fuzzy: Boolean = false): List<String> {
         val prefix = Norm.word(ctx.prefix, lang)
         val hist = ctx.history.map { Norm.word(it, lang) }
 
@@ -135,23 +191,33 @@ class Suggester(
                 }
             }
         } else {
-            var i = model.lowerBound(prefix)
-            while (i < model.size && model.word(i).startsWith(prefix)) {
-                val w = model.word(i)
-                if (w != prefix && w != ContextParser.START) {
-                    var s = model.uni(i).toDouble()
-                    for ((order, m) in byOrder) m[i]?.let { s += 60.0 * (order - 1) + it }
-                    add(w, s)
+            val variants = if (fuzzy && lang == Lang.UZ) {
+                OldSpelling.variants(prefix) { hasPrefix(it) }
+            } else {
+                listOf(prefix to 0)
+            }
+            for ((p, subs) in variants) {
+                val penalty = SUBSTITUTION_PENALTY * subs
+                var i = model.lowerBound(p)
+                while (i < model.size && model.word(i).startsWith(p)) {
+                    val w = model.word(i)
+                    if (w != prefix && w != ContextParser.START) {
+                        var s = model.uni(i).toDouble() - penalty
+                        for ((order, m) in byOrder) m[i]?.let { s += 60.0 * (order - 1) + it }
+                        add(w, s)
+                    }
+                    i++
                 }
-                i++
             }
             val pm = personal
             if (pm != null) {
-                for ((w, c) in pm.withPrefix(prefix)) {
-                    if (w == prefix || !trusted(w, c)) continue
-                    var s = 120.0 + 25.0 * log2(c + 1.0)
-                    for ((k, key) in personalCtx) pm.next(key)?.get(w)?.let { s += 40.0 * k }
-                    add(w, s)
+                for ((p, subs) in variants) {
+                    for ((w, c) in pm.withPrefix(p)) {
+                        if (w == prefix || !trusted(w, c)) continue
+                        var s = 120.0 + 25.0 * log2(c + 1.0) - SUBSTITUTION_PENALTY * subs
+                        for ((k, key) in personalCtx) pm.next(key)?.get(w)?.let { s += 40.0 * k }
+                        add(w, s)
+                    }
                 }
             }
         }
@@ -164,6 +230,13 @@ class Suggester(
      * bir marta qilingan imlo xatosi taklifga chiqib qolmasin.
      */
     private fun trusted(word: String, count: Int): Boolean = count >= 2 || model.indexOf(word) >= 0
+
+    /** Lug'atda yoki shaxsiy so'zlarda [p] bilan boshlanadigan so'z bormi. */
+    private fun hasPrefix(p: String): Boolean {
+        val i = model.lowerBound(p)
+        if (i < model.size && model.word(i).startsWith(p)) return true
+        return personal?.withPrefix(p)?.isNotEmpty() == true
+    }
 
     /** Hammasini saralamasdan eng yaxshi [k] tasini tanlaydi (bir harfli prefiksda minglab nomzod bo'ladi). */
     private fun topK(scores: Map<String, Double>, k: Int): List<String> {
@@ -191,6 +264,9 @@ class Suggester(
     }
 
     companion object {
+        /** Eski yozuvdan almashtirilgan har harf uchun (log2 * 10 shkalasida ~0.8 marta kamroq uchrash). */
+        private const val SUBSTITUTION_PENALTY = 8.0
+
         /** Taklif harflari yozilayotgan so'z (yoki Shift holati) ga mos katta-kichik bo'lsin. */
         fun capStyle(rawPrefix: String, shift: Shift): CapStyle = when {
             rawPrefix.length >= 2 && rawPrefix.all { !it.isLetter() || it.isUpperCase() } -> CapStyle.ALL

@@ -221,6 +221,41 @@ class PredictionTest {
         assertEquals("zzqbbb", s.suggest(TextContext("", "zzqumumiy", listOf("zzqx2", "zzqumumiy")), CapStyle.NONE, 3).first())
     }
 
+    private fun fuzzy(text: String, on: Boolean = true): List<String> {
+        val ctx = ContextParser.parse(text)
+        return Suggester(model("uz"), null, Lang.UZ).suggest(ctx, Suggester.capStyle(ctx.prefix, Shift.OFF), 3, on)
+    }
+
+    @Test
+    fun eskiYozuv_s_dan_ş_ga() {
+        val shu = cp(0x15F) + "u" // şu
+        assertTrue(fuzzy("su").toString(), fuzzy("su").contains(shu))
+        assertFalse(fuzzy("su", on = false).contains(shu))
+    }
+
+    @Test
+    fun eskiYozuv_sh_va_tutuq() {
+        val shahar = cp(0x15F) + "ahar" // şahar
+        assertTrue(fuzzy("shahar").toString(), fuzzy("shahar").contains(shahar))
+        val oz = cp(0xF6) + "z" // öz
+        assertTrue(fuzzy("o'z").toString(), fuzzy("o'z").contains(oz))
+        assertTrue(fuzzy("oz").toString(), fuzzy("oz").contains(oz))
+        val gozal = "g" + cp(0xF6) + "zal" // gözal
+        assertTrue(fuzzy("gozal").toString(), fuzzy("gozal").contains(gozal))
+        // katta harf ham saqlanadi: "Sha" -> "Şahar"
+        val ctx = ContextParser.parse("Sha")
+        val up = Suggester(model("uz"), null, Lang.UZ).suggest(ctx, Suggester.capStyle(ctx.prefix, Shift.OFF), 3, true)
+        assertTrue(up.toString(), up.contains(cp(0x15E) + "ahar"))
+    }
+
+    @Test
+    fun eskiYozuv_variantlar() {
+        val all = setOf("sa", "şa", "şah")
+        val v = OldSpelling.variants("sha") { p -> all.any { it.startsWith(p) } }.map { it.first }
+        // "sha" ning o'zi davomsiz, "şa" (sh -> ş) va "şha" yo'q -> faqat "şa"
+        assertEquals(listOf("şa"), v)
+    }
+
     @Test
     fun shaxsiyModel_saqlashVaOqish() {
         val p = PersonalModel()

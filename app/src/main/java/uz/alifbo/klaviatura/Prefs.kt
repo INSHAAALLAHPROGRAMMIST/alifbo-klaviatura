@@ -64,6 +64,11 @@ class Prefs(private val context: Context) {
         get() = bool("learn", true)
         set(v) = putBool("learn", v)
 
+    /** Eski yozuvdan yordam: "s" yozilsa "ş" li so'zlar ham taklif qilinadi va h.k. (o'tish davri uchun). */
+    var oldSpellingHelp: Boolean
+        get() = bool("oldSpelling", true)
+        set(v) = putBool("oldSpelling", v)
+
     /** O'rganilganlarni o'chirganda oshiriladi: klaviatura xotiradagi nusxani tashlab yuboradi. */
     var personalEpoch: Int
         get() = int("personalEpoch", 0)

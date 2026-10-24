@@ -26,6 +26,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     // tahmin
     private var predictOn = false
     private var learnOn = false
+    private var fuzzyOn = true
     private var justAccepted = false
     private var knownEpoch = 0
     private val models = java.util.concurrent.ConcurrentHashMap<String, LanguageModel>()
@@ -196,6 +197,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
             )
         val noSuggestions = isText && (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0
         predictOn = prefs.predict && isText && !sensitive && !noSuggestions
+        fuzzyOn = prefs.oldSpellingHelp
         learnOn = predictOn && prefs.learn &&
             (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) == 0
     }
@@ -235,7 +237,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
             }
             val ctx = ContextParser.parse(before)
             val style = Suggester.capStyle(ctx.prefix, shift)
-            strip.suggestions = suggesterFor(langs[langIdx]).suggest(ctx, style, 3)
+            strip.suggestions = suggesterFor(langs[langIdx]).suggest(ctx, style, 3, fuzzyOn)
         } catch (t: Throwable) {
             strip.suggestions = emptyList()
         }

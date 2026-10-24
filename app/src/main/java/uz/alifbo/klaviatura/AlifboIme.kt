@@ -28,7 +28,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     private var learnOn = false
     private var justAccepted = false
     private var knownEpoch = 0
-    private val models = HashMap<String, LanguageModel>()
+    private val models = java.util.concurrent.ConcurrentHashMap<String, LanguageModel>()
     private val personals = HashMap<String, PersonalModel>()
     private val suggesters = HashMap<String, Suggester>()
 
@@ -37,6 +37,9 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         prefs = Prefs(this)
         knownEpoch = prefs.personalEpoch
         loadLangs()
+        // ~2 MB modelni birinchi harf bosilishini kutmasdan fonda o'qib qo'yamiz
+        val first = langs[langIdx]
+        Thread { modelFor(first) }.apply { isDaemon = true }.start()
     }
 
     override fun onCreateInputView(): View {

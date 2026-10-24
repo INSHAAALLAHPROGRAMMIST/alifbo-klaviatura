@@ -33,6 +33,9 @@ const minUni = Number(opt('min-count', '1'));
 const minBi = Number(opt('min-bigram', '1'));
 const maxLines = Number(opt('max-lines', '0'));
 const leipzig = args.includes('--leipzig');
+// --damp tom,mary: korpusda haddan tashqari ko'p uchraydigan so'zlar (Tatoeba'dagi "Tom" kabi) 20 marta susaytiriladi
+const damp = new Set(String(opt('damp', '')).split(',').map((s) => s.trim()).filter(Boolean));
+const dampF = (w) => (damp.has(w) ? 0.05 : 1);
 const inputs = [];
 {
   const i = args.indexOf('--in');
@@ -144,7 +147,7 @@ const countOf = new Map(kept);
 const vocab = [START, ...kept.map(([w]) => w)].sort();
 const idOf = new Map(vocab.map((w, i) => [w, i]));
 if (vocab[0] !== START) throw new Error('"<s>" 0-o\'rinda bo\'lishi kerak');
-const uniOf = (w) => (w === START ? 0 : countOf.get(w));
+const uniOf = (w) => (w === START ? 0 : Math.max(1, Math.round(countOf.get(w) * dampF(w))));
 shards.clear();
 candidates.length = 0;
 
@@ -185,6 +188,7 @@ for (let i = 0; i < vocab.length; i++) {
   const entries = row
     ? [...row.entries()]
         .filter(([, c]) => c >= minBi)
+        .map(([id, c]) => [id, Math.max(1, Math.round(c * dampF(vocab[id])))])
         .sort((a, b) => b[1] - a[1] || (vocab[a[0]] < vocab[b[0]] ? -1 : 1))
         .slice(0, K)
     : [];

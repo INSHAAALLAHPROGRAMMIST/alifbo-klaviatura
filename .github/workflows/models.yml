@@ -45,8 +45,9 @@ jobs:
           UZ="corpus/uz_tg.txt corpus/uz_news.txt tools/seed/uz.txt"
           node tools/build-model.mjs --lang uz  --in $UZ --out models/lm_uz.bin  --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
           node tools/build-model.mjs --lang uzc --in $UZ --out models/lm_uzc.bin --max-vocab 60000 --min-count 3 --min-bigram 2 | tee -a models/stats.txt
-          node tools/build-model.mjs --lang en  --in corpus/en.txt tools/seed/en.txt --out models/lm_en.bin --max-vocab 40000 --min-count 2 --min-bigram 2 | tee -a models/stats.txt
-          node tools/build-model.mjs --lang ru  --in corpus/ru.txt tools/seed/ru.txt --out models/lm_ru.bin --max-vocab 50000 --min-count 2 --min-bigram 2 | tee -a models/stats.txt
+          # Tatoeba gaplarining ko'pi "Tom", "Mary" haqida: ularni susaytiramiz
+          node tools/build-model.mjs --lang en  --in corpus/en.txt tools/seed/en.txt --out models/lm_en.bin --max-vocab 40000 --min-count 2 --min-bigram 2 --damp tom,mary,sami,layla,john,ken,jack | tee -a models/stats.txt
+          node tools/build-model.mjs --lang ru  --in corpus/ru.txt tools/seed/ru.txt --out models/lm_ru.bin --max-vocab 50000 --min-count 2 --min-bigram 2 --damp том,мэри,сами,лейла,джон,кен,джек | tee -a models/stats.txt
 
       - name: Tekshirish
         run: |

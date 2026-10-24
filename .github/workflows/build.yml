@@ -59,6 +59,11 @@ jobs:
           fi
           echo "Ruxsatlar toza: INTERNET yo'q."
 
+      - name: Imzo sertifikati
+        run: |
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$BT/apksigner" verify --print-certs app/build/outputs/apk/release/*.apk | grep -E "DN|SHA-256"
+
       - uses: actions/upload-artifact@v4
         with:
           name: alifbo-apk

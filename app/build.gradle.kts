@@ -16,8 +16,10 @@ android {
         applicationId = "uz.alifbo.klaviatura"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        // CI'dagi har yig'ish raqami: yangi versiya eskisining ustiga o'rnatilishi uchun o'sib boradi
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = run
+        versionName = "0.3.$run"
     }
 
     signingConfigs {

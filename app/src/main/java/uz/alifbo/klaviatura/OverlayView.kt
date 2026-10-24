@@ -33,6 +33,19 @@ class OverlayView(context: Context) : View(context) {
 
     override fun onTouchEvent(event: MotionEvent): Boolean = false
 
+    /**
+     * Qatlam o'z balandligini talab qilmaydi: aks holda View'ning standart o'lchovi (getDefaultSize)
+     * AT_MOST rejimida butun ekran balandligini oladi va IME oynasi to'liq ekranga cho'ziladi.
+     * Ota-ona FrameLayout ikkinchi o'tishda aniq (EXACTLY) balandlik beradi.
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) {
+            MeasureSpec.getSize(heightMeasureSpec)
+        } else 0
+        setMeasuredDimension(w, h)
+    }
+
     fun showPreview(keyRect: RectF, label: String, keyH: Float) {
         prevRect = RectF(keyRect)
         prevText = label

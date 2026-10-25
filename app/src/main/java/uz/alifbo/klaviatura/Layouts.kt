@@ -158,8 +158,31 @@ object Layouts {
         hidden = mapOf("s" to "ş", "g" to "ğ", "o" to "ö"),
     )
 
-    fun letters(lang: Lang, numberRow: Boolean = false, uzFastLayout: Boolean = false): KbLayout {
-        val spec = if (lang == Lang.UZ && uzFastLayout) uzFast else specs.getValue(lang)
+    /**
+     * "Bir qo'l" o'zbek maketi (faqat o'ng bosh barmoq): tools/optimize-layout.mjs --mode one topgan.
+     * Hammasi bitta barmoqda bo'lgani uchun tez-tez ketma-ket keladigan harflar markazda yonma-yon
+     * (o'rtacha masofa 3.8 dan 2.2 tugmaga), siyrak harflar chetlarda; model bo'yicha QWERTY'dan ~17% tez.
+     */
+    private val uzOneHand = Spec(
+        r1 = listOf(TUTUQ, "f", "v", "e", "g", "d", "t", "y", "p", "x"),
+        r2 = listOf("j", "ç", "u", "r", "a", "l", "o", "q", "z"),
+        r3 = listOf("h", "k", "m", "n", "i", "s", "b"),
+        extra = mapOf(TUTUQ to listOf("'", RSQUO, OKINA)),
+        hidden = mapOf("s" to "ş", "g" to "ğ", "o" to "ö"),
+    )
+
+    /** O'zbek lotin maketlari: 0 = QWERTY, 1 = Tezkor (ikki barmoq), 2 = Bir qo'l. */
+    const val UZ_QWERTY = 0
+    const val UZ_FAST = 1
+    const val UZ_ONE_HAND = 2
+
+    fun letters(lang: Lang, numberRow: Boolean = false, uzVariant: Int = UZ_QWERTY): KbLayout {
+        val spec = when {
+            lang != Lang.UZ -> specs.getValue(lang)
+            uzVariant == UZ_FAST -> uzFast
+            uzVariant == UZ_ONE_HAND -> uzOneHand
+            else -> specs.getValue(lang)
+        }
         val total = maxOf(spec.r1.size, spec.r2.size, spec.r3.size + 2).toFloat()
         val rows = mutableListOf<List<Key>>()
         if (numberRow) {

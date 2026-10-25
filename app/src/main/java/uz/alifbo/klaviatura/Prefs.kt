@@ -54,10 +54,10 @@ class Prefs(private val context: Context) {
         get() = bool("hints", false)
         set(v) = putBool("hints", v)
 
-    /** O'zbek lotin uchun "Tezkor" (o'zbek tiliga optimallashtirilgan) maket; false = QWERTY. */
-    var uzFastLayout: Boolean
-        get() = bool("uzFast", false)
-        set(v) = putBool("uzFast", v)
+    /** O'zbek lotin maketi: Layouts.UZ_QWERTY / UZ_FAST (Tezkor) / UZ_ONE_HAND (Bir qo'l). */
+    var uzLayout: Int
+        get() = int("uzLayout", if (bool("uzFast", false)) Layouts.UZ_FAST else Layouts.UZ_QWERTY)
+        set(v) = putInt("uzLayout", v)
 
     /** Tahmin qatori (so'z takliflari). */
     var predict: Boolean

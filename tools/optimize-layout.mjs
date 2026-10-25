@@ -1,14 +1,20 @@
 #!/usr/bin/env node
-// O'zbek tili uchun telefon klaviaturasi maketini optimallashtiradi (ikki bosh barmoq bilan yozish).
+// O'zbek tili uchun telefon klaviaturasi maketini optimallashtiradi.
 //
-//   node tools/optimize-layout.mjs app/src/main/assets/lm_uz.bin [--iters 400000] [--restarts 12] [--seed 7]
+//   node tools/optimize-layout.mjs app/src/main/assets/lm_uz.bin [--mode two|one] [--iters 400000] [--restarts 12] [--seed 7]
+//
+//   --mode two (sukut): ikki bosh barmoq bilan yozish ("Tezkor" maket).
+//   --mode one        : faqat o'ng qo'l bosh barmog'i bilan yozish ("Bir qo'l" maket).
 //
 // 1) Harf va harf juftlari chastotasi tayyor modeldagi so'zlardan olinadi (so'z soni ~ 2^(q/10) - 1).
 //    ş, ğ, ö mos ravishda s, g, o tugmalari ichida bo'lgani uchun o'sha tugmalar hisobiga qo'shiladi.
-// 2) Maket geometriyasi Söz klaviaturasiniki: 10 / 9 / 7 tugma (26 joy = 25 harf + tutuq belgisi).
+// 2) Maket geometriyasi Söz klaviaturasiniki: 10 / 9 / 7 tugma (26 joy = 25 harf + tutuq belgisi),
+//    pastda probel (x 3.0 .. 7.9).
 // 3) Yozish vaqti modeli (Fitts qonuni): bitta barmoq ketma-ket ikki tugmani bossa
-//    t = a + b * log2(D / W + 1); barmoqlar navbatlashsa t = T_ALT (ikkinchi barmoq oldindan tayyor turadi);
-//    yuqori qatorlar biroz uzoqroq: har qatorga REACH qo'shiladi.
+//    t = a + b * log2(D / W + 1).
+//    two: barmoqlar navbatlashsa t = T_ALT; yuqori qatorlar biroz uzoqroq (REACH).
+//    one: hamma bosish bitta barmoqda; har so'z oxirida probelga borib qaytiladi; o'ng bosh barmoq
+//         uchun chap va yuqori chetlar noqulayroq (o'ng-pastdagi tayanch nuqtadan masofa, REACH1).
 // 4) Simulyatsion "yumshatish" (simulated annealing) bilan eng kam o'rtacha vaqtli joylashuv qidiriladi.
 import fs from 'node:fs';
 
@@ -16,11 +22,12 @@ const file = process.argv[2];
 const args = process.argv.slice(3);
 const opt = (n, d) => {
   const i = args.indexOf('--' + n);
-  return i >= 0 ? Number(args[i + 1]) : d;
+  return i >= 0 ? args[i + 1] : d;
 };
-const ITERS = opt('iters', 400000);
-const RESTARTS = opt('restarts', 12);
-let seed = opt('seed', 7);
+const MODE = opt('mode', 'two');
+const ITERS = Number(opt('iters', 400000));
+const RESTARTS = Number(opt('restarts', 12));
+let seed = Number(opt('seed', 7));
 const rand = () => {
   // mulberry32 — qayta takrorlanadigan natija uchun
   seed |= 0;
@@ -51,9 +58,14 @@ const idx = new Map(LETTERS.map((c, i) => [c, i]));
 const N = LETTERS.length; // 26
 const uni = new Float64Array(N);
 const big = new Float64Array(N * N);
+const first = new Float64Array(N); // so'z boshidagi harf (probeldan keyin)
+const last = new Float64Array(N); // so'z oxiridagi harf (probeldan oldin)
 let total = 0;
+let wordTotal = 0;
 for (const [w, c] of words) {
   let prev = -1;
+  let firstK = -1;
+  let lastK = -1;
   for (const ch0 of w) {
     const ch = MERGE[ch0] ?? ch0;
     const k = idx.get(ch);
@@ -61,12 +73,22 @@ for (const [w, c] of words) {
       prev = -1;
       continue;
     }
+    if (firstK < 0) firstK = k;
+    lastK = k;
     uni[k] += c;
     total += c;
     if (prev >= 0) big[prev * N + k] += c;
     prev = k;
   }
+  if (firstK >= 0) {
+    first[firstK] += c;
+    last[lastK] += c;
+    wordTotal += c;
+  }
 }
+// "one" rejimi xom sonlar bilan ishlaydi (probel bosishlari ham hisobda), "two" — ulushlar bilan
+const rawUni = Float64Array.from(uni);
+const rawBig = Float64Array.from(big);
 for (let i = 0; i < N; i++) uni[i] /= total;
 let bigTotal = 0;
 for (let i = 0; i < N * N; i++) bigTotal += big[i];
@@ -83,22 +105,43 @@ const A = 0.1;
 const B = 0.15;
 const T_ALT = 0.13;
 const REACH = 0.015;
-const thumb = slots.map((s) => (s.x < 5 ? 0 : 1));
+const REACH1 = 0.006;
+const fitts = (d) => A + B * Math.log2(d + 1);
+const thumb = slots.map((s) => (MODE === 'one' ? 1 : s.x < 5 ? 0 : 1));
 const pairT = new Float64Array(S * S);
 for (let a = 0; a < S; a++) {
   for (let b = 0; b < S; b++) {
     if (thumb[a] !== thumb[b]) pairT[a * S + b] = T_ALT;
-    else {
-      const d = Math.hypot(slots[a].x - slots[b].x, slots[a].y - slots[b].y);
-      pairT[a * S + b] = A + B * Math.log2(d + 1);
-    }
+    else pairT[a * S + b] = fitts(Math.hypot(slots[a].x - slots[b].x, slots[a].y - slots[b].y));
   }
 }
-const reach = slots.map((s) => REACH * (2 - s.r));
+// probel: x 3.0 .. 7.9, y = 3 * ROW_H; barmoq eng yaqin nuqtasiga boradi
+const SPACE = { x0: 3.0, x1: 7.9, y: 3 * ROW_H };
+const spaceT = slots.map((s) => {
+  const dx = s.x < SPACE.x0 ? SPACE.x0 - s.x : s.x > SPACE.x1 ? s.x - SPACE.x1 : 0;
+  return fitts(Math.hypot(dx, SPACE.y - s.y));
+});
+// o'ng bosh barmoq tayanchi: klaviaturaning o'ng-past qismi
+const HOME = { x: 7.0, y: 1.5 * ROW_H };
+const reach = slots.map((s) =>
+  MODE === 'one' ? REACH1 * Math.hypot(s.x - HOME.x, s.y - HOME.y) : REACH * (2 - s.r),
+);
 
-/** pos[harf] = joy raqami. O'rtacha bir harfga ketadigan vaqt (soniya). */
+/** pos[harf] = joy raqami. O'rtacha bir bosishga ketadigan vaqt (soniya). */
 function cost(pos) {
   let c = 0;
+  if (MODE === 'one') {
+    for (let i = 0; i < N; i++) {
+      const pi = pos[i];
+      c += rawUni[i] * reach[pi] + (first[i] + last[i]) * spaceT[pi];
+      const row = i * N;
+      for (let j = 0; j < N; j++) {
+        const f = rawBig[row + j];
+        if (f) c += f * pairT[pi * S + pos[j]];
+      }
+    }
+    return c / (total + wordTotal);
+  }
   for (let i = 0; i < N; i++) {
     c += uni[i] * reach[pos[i]];
     const row = i * N;
@@ -129,6 +172,11 @@ const qwerty = [
   ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
   ['z', 'x', 'ç', 'v', 'b', 'n', 'm'],
 ];
+const tezkor = [
+  [TUTUQ, 'x', 'p', 'f', 'e', 'z', 'm', 'q', 'v', 'h'],
+  ['j', 'o', 'u', 'ç', 'y', 'd', 'l', 's', 'k'],
+  ['a', 'g', 'i', 'b', 'n', 'r', 't'],
+];
 const base = cost(fromRows(qwerty));
 
 // ---------------------------------------------------------------- qidiruv
@@ -147,7 +195,7 @@ for (let r = 0; r < RESTARTS; r++) {
   for (let it = 0; it < ITERS; it++) {
     const temp = T0 * (1 - it / ITERS) + 1e-6;
     const a = Math.floor(rand() * N);
-    let b = Math.floor(rand() * N);
+    const b = Math.floor(rand() * N);
     if (a === b) continue;
     [pos[a], pos[b]] = [pos[b], pos[a]];
     const next = cost(pos);
@@ -170,14 +218,29 @@ const alt = (pos) => {
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (thumb[pos[i]] !== thumb[pos[j]]) s += big[i * N + j];
   return s;
 };
-const balance = (pos) => {
-  let l = 0;
-  for (let i = 0; i < N; i++) if (thumb[pos[i]] === 0) l += uni[i];
-  return l;
+const meanDist = (pos) => {
+  // ketma-ket harflar orasidagi o'rtacha masofa (tugma kengligida)
+  let s = 0;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const a = slots[pos[i]];
+      const b = slots[pos[j]];
+      s += big[i * N + j] * Math.hypot(a.x - b.x, a.y - b.y);
+    }
+  }
+  return s;
 };
-console.log(`\nQWERTY (Söz):  ${fmt(qwerty)}`);
-console.log(`  o'rtacha ${(base * 1000).toFixed(1)} ms/harf, barmoq navbatlashuvi ${(alt(fromRows(qwerty)) * 100).toFixed(0)}%, chap barmoq ${(balance(fromRows(qwerty)) * 100).toFixed(0)}%`);
-console.log(`\nTezkor:        ${fmt(toRows(best))}`);
-console.log(`  o'rtacha ${(bestCost * 1000).toFixed(1)} ms/harf, barmoq navbatlashuvi ${(alt(best) * 100).toFixed(0)}%, chap barmoq ${(balance(best) * 100).toFixed(0)}%`);
-console.log(`\nModel bo'yicha farq: ${(((base - bestCost) / base) * 100).toFixed(1)}% tezroq`);
+const report = (name, rows) => {
+  const pos = fromRows(rows);
+  const extra = MODE === 'one'
+    ? `harflar orasidagi o'rtacha masofa ${meanDist(pos).toFixed(2)} tugma`
+    : `barmoq navbatlashuvi ${(alt(pos) * 100).toFixed(0)}%`;
+  console.log(`\n${name.padEnd(14)} ${fmt(rows)}`);
+  console.log(`  o'rtacha ${(cost(pos) * 1000).toFixed(1)} ms/bosish, ${extra}`);
+};
+console.log(`\nRejim: ${MODE === 'one' ? "bir qo'l (o'ng bosh barmoq)" : 'ikki bosh barmoq'}`);
+report('QWERTY (Söz):', qwerty);
+report('Tezkor:', tezkor);
+report('Eng yaxshisi:', toRows(best));
+console.log(`\nModel bo'yicha QWERTY'dan farq: ${(((base - bestCost) / base) * 100).toFixed(1)}% tezroq`);
 console.log(`JSON: ${JSON.stringify(toRows(best))}`);

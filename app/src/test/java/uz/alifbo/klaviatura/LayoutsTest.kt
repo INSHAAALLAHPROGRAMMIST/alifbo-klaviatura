@@ -48,13 +48,13 @@ class LayoutsTest {
     @Test
     fun tezkorMaket_xuddiShuHarflar_vaUnlilarChapda() {
         val qwerty = Layouts.letters(Lang.UZ).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
-        val fast = Layouts.letters(Lang.UZ, uzFastLayout = true).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        val fast = Layouts.letters(Lang.UZ, uzVariant = Layouts.UZ_FAST).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
         // bir xil 26 belgi (25 harf + tutuq) va bir xil yashirin harflar
         assertEquals(qwerty.map { it.label }.toSet(), fast.map { it.label }.toSet())
         assertEquals(26, fast.size)
         assertEquals(qwerty.map { it.hint }.filter { it.isNotEmpty() }.toSet(), fast.map { it.hint }.filter { it.isNotEmpty() }.toSet())
         // unlilar a i o u e — chap yarmida (har qatorning chap qismi)
-        val l = Layouts.letters(Lang.UZ, uzFastLayout = true)
+        val l = Layouts.letters(Lang.UZ, uzVariant = Layouts.UZ_FAST)
         for (v in listOf("a", "i", "o", "u", "e")) {
             val row = l.rows.first { r -> r.any { it.label == v } }
             var x = 0f
@@ -65,6 +65,29 @@ class LayoutsTest {
             assertTrue("$v chapda emas", x + 0.5f < l.total / 2f)
         }
         // qatorlar og'irligi teng
+        for (row in l.rows) assertEquals(l.total.toDouble(), row.sumOf { it.weight.toDouble() }, 0.02)
+    }
+
+    @Test
+    fun birQolMaket_xuddiShuHarflar_vaKopHarflarMarkazda() {
+        val qwerty = Layouts.letters(Lang.UZ).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        val l = Layouts.letters(Lang.UZ, uzVariant = Layouts.UZ_ONE_HAND)
+        val one = l.rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        assertEquals(qwerty.map { it.label }.toSet(), one.map { it.label }.toSet())
+        assertEquals(26, one.size)
+        assertEquals(qwerty.map { it.hint }.filter { it.isNotEmpty() }.toSet(), one.map { it.hint }.filter { it.isNotEmpty() }.toSet())
+        // eng ko'p uchraydigan harflar (a i n l r o s) yuqori qatorda emas va markazda (o'ng bosh barmoq yetadigan joyda)
+        for (v in listOf("a", "i", "n", "l", "r", "o", "s")) {
+            val r = l.rows.indexOfFirst { row -> row.any { it.label == v } }
+            assertTrue("$v yuqori qatorda", r >= 1)
+            var x = 0f
+            for (k in l.rows[r]) {
+                if (k.label == v) break
+                x += k.weight
+            }
+            val cx = x + 0.5f
+            assertTrue("$v markazda emas ($cx)", cx in 3f..8.5f)
+        }
         for (row in l.rows) assertEquals(l.total.toDouble(), row.sumOf { it.weight.toDouble() }, 0.02)
     }
 

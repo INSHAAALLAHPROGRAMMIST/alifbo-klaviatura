@@ -50,6 +50,25 @@ bir necha hafta kerak.
 node tools/optimize-layout.mjs app/src/main/assets/lm_uz.bin --iters 600000 --restarts 8 --seed 7
 ```
 
+### Bir qöl maketi (faqat ö'ng baş barmoq)
+
+Xuddi şu usul, lekin hamma bosiş bitta barmoqda: navbatlaşuv yöq, har söz oxirida probelga borib
+qaytiladi, ö'ng baş barmoq uçun chap va yuqori çetlar noqulayroq (`--mode one`):
+
+```
+ʼ f v e g d t y p x
+ j ç u r a l o q z
+  h k m n i s b
+```
+
+Tez-tez keladigan harflar markazda yonma-yon: ketma-ket ikki harf orasidagi o'rtaça masofa 3,8 dan
+2,2 tugmaga tuşadi, model bölyiça bir bosişga 352 ms (QWERTY'da 425 ms), ya'ni ~17% tez.
+Tezkor maket bir qölda faqat ~4% yaxşi bölgani uçun alohida maket qilindi.
+
+```
+node tools/optimize-layout.mjs app/src/main/assets/lm_uz.bin --mode one --iters 1000000 --restarts 8 --seed 99
+```
+
 Har qanday tugmani yuqoriga sürish — uning birinçi qö'şimça belgisi (yaşirin harf yoki raqam).
 Probelni yonga sürish yoki globusni bosiş — tilni almaştiradi; globus içida emoji ham bor:
 globusni yuqoriga sürish — emoji paneli, uzoq bosiş — emoji va til tanlagiç.

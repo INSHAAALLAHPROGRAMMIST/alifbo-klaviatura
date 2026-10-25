@@ -150,7 +150,7 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         k.shift = shift
         k.enterStyle = enter
         k.setLayout(
-            if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow, prefs.uzFastLayout) else Layouts.symbols(page),
+            if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow, prefs.uzLayout) else Layouts.symbols(page),
         )
     }
 

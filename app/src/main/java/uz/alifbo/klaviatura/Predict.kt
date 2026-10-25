@@ -131,6 +131,9 @@ object OldSpelling {
     }
 }
 
+/** Yozilgan so'zning tuzatilgan shakli. [oldSpelling] — yangi alifbo harflariga oid (sh -> ş, oʼ -> ö ...). */
+data class Correction(val word: String, val score: Double, val oldSpelling: Boolean)
+
 class Suggester(
     private val model: LanguageModel,
     private val personal: PersonalModel?,
@@ -209,6 +212,14 @@ class Suggester(
                     i++
                 }
             }
+            // tuzatishlar: yangi alifbo harflariga oidlari har doim eng oldinda, boshqa xatolar esa
+            // yozilganning davomi (to'ldirish) topilmaganda
+            if (prefix.length >= 2) {
+                val hadCompletions = scores.isNotEmpty()
+                for (c in corrections(prefix, fuzzy)) {
+                    if (c.oldSpelling || !hadCompletions) add(c.word, c.score)
+                }
+            }
             val pm = personal
             if (pm != null) {
                 for ((p, subs) in variants) {
@@ -230,6 +241,92 @@ class Suggester(
      * bir marta qilingan imlo xatosi taklifga chiqib qolmasin.
      */
     private fun trusted(word: String, count: Int): Boolean = count >= 2 || model.indexOf(word) >= 0
+
+    /** Lug'atdagi yoki (kamida 2 marta yozilgan) shaxsiy so'z. */
+    private fun isKnown(w: String): Boolean =
+        model.indexOf(w) >= 0 || (personal?.uniCount(w) ?: 0) >= 2
+
+    /** Foydalanuvchi yozgan so'z ma'lummi: lug'atda bor yoki o'zi kamida bir marta yozgan (tuzatilmaydi). */
+    private fun isKnownTyped(w: String): Boolean =
+        model.indexOf(w) >= 0 || (personal?.uniCount(w) ?: 0) >= 1
+
+    private fun uniOf(w: String): Double {
+        val i = model.indexOf(w)
+        return if (i >= 0) model.uni(i).toDouble() else 100.0
+    }
+
+    private val alphabet: CharArray = when (lang) {
+        Lang.UZ -> "abdefghijklmnopqrstuvxyzöğşçʼ".toCharArray()
+        Lang.EN -> "abcdefghijklmnopqrstuvwxyz'".toCharArray()
+        Lang.RU -> ((0x430..0x44F) + 0x451).map { it.toChar() }.toCharArray()
+        Lang.UZC -> ((0x430..0x44F) + listOf(0x451, 0x45E, 0x49B, 0x493, 0x4B3)).map { it.toChar() }.toCharArray()
+    }
+
+    /**
+     * [word] (kichik harfli, me'yorlangan) ning tuzatilgan shakllari, eng ishonchlisi birinchi.
+     * 1) Yangi alifboga oid: sh -> ş, ch -> ç, oʼ/o'/o` -> ö, gʼ -> ğ, s -> ş, o -> ö, g -> ğ, c -> ç (1000+ ball).
+     * 2) Oddiy xato: bitta harf tushib qolgan, ortiqcha, almashgan yoki o'rni almashgan (300+ ball).
+     * So'zning o'zi ma'lum bo'lsa — tuzatish yo'q.
+     */
+    fun corrections(word: String, fuzzy: Boolean): List<Correction> {
+        if (word.length < 2 || isKnownTyped(word)) return emptyList()
+        val out = HashMap<String, Correction>()
+        if (fuzzy && lang == Lang.UZ) {
+            for ((v, subs) in OldSpelling.variants(word) { hasPrefix(it) }) {
+                if (subs == 0 || v == word || !isKnown(v)) continue
+                out[v] = Correction(v, 1000.0 + uniOf(v) - SUBSTITUTION_PENALTY * subs, true)
+            }
+        }
+        fun consider(c: String) {
+            if (c.isEmpty() || c == word || out.containsKey(c) || !isKnown(c)) return
+            out[c] = Correction(c, 300.0 + uniOf(c), false)
+        }
+        val sb = StringBuilder()
+        for (i in word.indices) consider(word.removeRange(i, i + 1))
+        for (i in 0 until word.length - 1) {
+            sb.setLength(0)
+            sb.append(word)
+            sb.setCharAt(i, word[i + 1])
+            sb.setCharAt(i + 1, word[i])
+            consider(sb.toString())
+        }
+        for (i in word.indices) {
+            for (ch in alphabet) {
+                if (ch == word[i]) continue
+                sb.setLength(0)
+                sb.append(word)
+                sb.setCharAt(i, ch)
+                consider(sb.toString())
+            }
+        }
+        for (i in 0..word.length) {
+            for (ch in alphabet) {
+                sb.setLength(0)
+                sb.append(word, 0, i).append(ch).append(word, i, word.length)
+                consider(sb.toString())
+            }
+        }
+        return out.values.sortedWith(compareByDescending<Correction> { it.score }.thenBy { it.word })
+    }
+
+    /**
+     * Probel (yoki tinish belgisi) bosilganda avtomatik qo'yiladigan so'z, ishonch yetarli bo'lmasa null.
+     * Yangi alifboga oid tuzatish doim qo'llanadi; oddiy xato esa faqat so'z 3+ harfli, nomzod lug'atda
+     * tez-tez uchraydigan va ikkinchisidan aniq ustun bo'lsa. Gap o'rtasidagi bosh harfli so'z (ism bo'lishi
+     * mumkin) oddiy xato sifatida tuzatilmaydi.
+     */
+    fun autoCorrect(ctx: TextContext, fuzzy: Boolean): String? {
+        val w = Norm.word(ctx.prefix, lang)
+        val cands = corrections(w, fuzzy)
+        val best = cands.firstOrNull() ?: return null
+        if (best.oldSpelling) return best.word
+        if (w.length < 3) return null
+        if (ctx.prefix[0].isUpperCase() && ctx.prev != ContextParser.START) return null
+        if (model.indexOf(best.word) < 0 || best.score - 300.0 < 60.0) return null
+        val second = cands.getOrNull(1)
+        if (second != null && best.score - second.score < 15.0) return null
+        return best.word
+    }
 
     /** Lug'atda yoki shaxsiy so'zlarda [p] bilan boshlanadigan so'z bormi. */
     private fun hasPrefix(p: String): Boolean {
@@ -266,6 +363,14 @@ class Suggester(
     companion object {
         /** Eski yozuvdan almashtirilgan har harf uchun (log2 * 10 shkalasida ~0.8 marta kamroq uchrash). */
         private const val SUBSTITUTION_PENALTY = 8.0
+
+        /** Tuzatilgan so'zni yozilgan so'zning katta-kichikligiga moslaydi ("Shahar" -> "Şahar"). */
+        fun caseLike(word: String, typed: String): String = when {
+            typed.length >= 2 && typed.all { !it.isLetter() || it.isUpperCase() } -> word.uppercase(Locale.ROOT)
+            typed.isNotEmpty() && typed[0].isUpperCase() && word.isNotEmpty() ->
+                word.substring(0, 1).uppercase(Locale.ROOT) + word.substring(1)
+            else -> word
+        }
 
         /** Taklif harflari yozilayotgan so'z (yoki Shift holati) ga mos katta-kichik bo'lsin. */
         fun capStyle(rawPrefix: String, shift: Shift): CapStyle = when {

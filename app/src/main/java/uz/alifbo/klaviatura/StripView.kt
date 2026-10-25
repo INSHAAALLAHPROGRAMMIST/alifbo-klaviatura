@@ -32,6 +32,15 @@ class StripView(context: Context) : View(context) {
 
     var onPick: ((Int) -> Unit)? = null
 
+    /** Eng yaxshi taklif probelda avtomatik qo'yiladi: urg'u rangida ko'rsatiladi. */
+    var highlightBest: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
     /** Ekrandagi 3 joy -> taklif tartib raqami (chap, o'rta, o'ng). */
     private val order = intArrayOf(1, 0, 2)
     private var pressedSlot = -1
@@ -61,7 +70,11 @@ class StripView(context: Context) : View(context) {
             }
             val best = order[slot] == 0
             text.typeface = if (best) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            text.color = if (best) theme.text else theme.textSpecial
+            text.color = when {
+                best && highlightBest -> theme.accent
+                best -> theme.text
+                else -> theme.textSpecial
+            }
             text.textSize = dp(16f)
             val avail = slotW - dp(16f)
             val w = text.measureText(word)

@@ -85,6 +85,10 @@ class ScreensTest {
         save("kiril_yorug", root(Themes.light, Lang.UZC, shift = Shift.ONCE, suggestions = listOf("Яхши", "Бугун", "Жуда")), screenW)
         save("rus_qora", root(Themes.dark, Lang.RU, suggestions = listOf("хочу", "не", "знаю")), screenW)
         save("belgilar_yorug", root(Themes.light, Lang.UZ, page = Page.SYM1, suggestions = emptyList()), screenW)
+        // avtomatik tuzatish kutilmoqda: o'rtada urg'u rangida, chapda yozilganning o'zi
+        val fix = root(Themes.light, Lang.UZ, suggestions = listOf("yaxşi", "“yaxsi”", "yaxşilab"))
+        fix.strip.highlightBest = true
+        save("tuzatish_yorug", fix, screenW)
         save("belgilar2_qora", root(Themes.dark, Lang.UZ, page = Page.SYM2, suggestions = emptyList()), screenW)
     }
 

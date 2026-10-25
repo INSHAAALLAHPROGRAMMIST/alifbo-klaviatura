@@ -69,6 +69,11 @@ class Prefs(private val context: Context) {
         get() = bool("oldSpelling", true)
         set(v) = putBool("oldSpelling", v)
 
+    /** Probelda xato so'zni avtomatik tuzatish (orqaga o'chirish bilan qaytariladi). */
+    var autoCorrect: Boolean
+        get() = bool("autoCorrect", true)
+        set(v) = putBool("autoCorrect", v)
+
     /** O'rganilganlarni o'chirganda oshiriladi: klaviatura xotiradagi nusxani tashlab yuboradi. */
     var personalEpoch: Int
         get() = int("personalEpoch", 0)

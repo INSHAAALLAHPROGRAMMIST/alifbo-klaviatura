@@ -248,6 +248,48 @@ class PredictionTest {
         assertTrue(up.toString(), up.contains(cp(0x15E) + "ahar"))
     }
 
+    private fun auto(lang: Lang, text: String): String? =
+        Suggester(model(lang.id), null, lang).autoCorrect(ContextParser.parse(text), true)
+
+    @Test
+    fun avtoTuzatish_yangiHarflarUstun() {
+        val yaxshi = "yax" + cp(0x15F) + "i"
+        assertEquals(yaxshi, auto(Lang.UZ, "yaxsi"))
+        assertEquals(cp(0x15F) + "ahar", auto(Lang.UZ, "shahar"))
+        val ozbekiston = cp(0xF6) + "zbekiston"
+        assertEquals(ozbekiston, auto(Lang.UZ, "o'zbekiston"))
+        assertEquals(ozbekiston, auto(Lang.UZ, "o`zbekiston"))
+        assertEquals(ozbekiston, auto(Lang.UZ, "oʻzbekiston"))
+        assertEquals("g" + cp(0xF6) + "zal", auto(Lang.UZ, "gozal"))
+        // bosh harf saqlanadi
+        assertEquals("Y" + yaxshi.substring(1), Suggester.caseLike(auto(Lang.UZ, "Yaxsi")!!, "Yaxsi"))
+    }
+
+    @Test
+    fun avtoTuzatish_oddiyXato_va_tegmaslik() {
+        assertEquals("kitob", auto(Lang.UZ, "kitbo"))
+        assertEquals("the", auto(Lang.EN, "teh"))
+        // to'g'ri yozilgan so'zga tegilmaydi
+        assertEquals(null, auto(Lang.UZ, "katta"))
+        assertEquals(null, auto(Lang.EN, "house"))
+        // juda qisqa so'zda oddiy xato tuzatilmaydi
+        assertEquals(null, auto(Lang.EN, "hte".take(2)))
+    }
+
+    @Test
+    fun avtoTuzatish_shaxsiySozgaTegmaydi() {
+        val p = PersonalModel()
+        p.learn(null, "yaxsi")
+        val s = Suggester(model("uz"), p, Lang.UZ)
+        assertEquals(null, s.autoCorrect(ContextParser.parse("yaxsi"), true))
+    }
+
+    @Test
+    fun tuzatishTaklifi_qatorda_birinchi() {
+        val yaxshi = "yax" + cp(0x15F) + "i"
+        assertEquals(yaxshi, fuzzy("yaxsi").first())
+    }
+
     @Test
     fun eskiYozuv_variantlar() {
         val all = setOf("sa", "şa", "şah")

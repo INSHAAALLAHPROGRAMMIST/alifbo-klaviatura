@@ -27,6 +27,16 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     private var predictOn = false
     private var learnOn = false
     private var fuzzyOn = true
+    private var autoCorrectOn = true
+
+    /** Qatordagi takliflar bosilganda qo'yiladigan matn (ko'rinishi qo'shtirnoqli bo'lishi mumkin). */
+    private var stripCommit: List<String> = emptyList()
+
+    /** Oxirgi avtomatik tuzatish: (asl so'z, qo'yilgan matn probel/belgi bilan). */
+    private var lastAutoCorrect: Pair<String, String>? = null
+
+    /** Foydalanuvchi qaytargan so'z: keyingi probelda qayta tuzatilmaydi. */
+    private var suppressAutoFor: String? = null
     private var justAccepted = false
     private var knownEpoch = 0
     private val models = java.util.concurrent.ConcurrentHashMap<String, LanguageModel>()
@@ -198,6 +208,9 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         val noSuggestions = isText && (info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0
         predictOn = prefs.predict && isText && !sensitive && !noSuggestions
         fuzzyOn = prefs.oldSpellingHelp
+        autoCorrectOn = prefs.autoCorrect
+        lastAutoCorrect = null
+        suppressAutoFor = null
         learnOn = predictOn && prefs.learn &&
             (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) == 0
     }
@@ -222,31 +235,95 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     private fun suggesterFor(lang: Lang): Suggester =
         suggesters.getOrPut(lang.id) { Suggester(modelFor(lang), personalFor(lang), lang) }
 
+    private fun clearStrip(strip: StripView) {
+        strip.suggestions = emptyList()
+        strip.highlightBest = false
+        stripCommit = emptyList()
+    }
+
     private fun refreshSuggestions() {
         val strip = root?.strip ?: return
         if (!predictOn || page != Page.LETTERS) {
-            strip.suggestions = emptyList()
+            clearStrip(strip)
             return
         }
         try {
             val ic = currentInputConnection
             val before = ic?.getTextBeforeCursor(80, 0)
             if (before == null) {
-                strip.suggestions = emptyList()
+                clearStrip(strip)
                 return
             }
             val ctx = ContextParser.parse(before)
             val style = Suggester.capStyle(ctx.prefix, shift)
-            strip.suggestions = suggesterFor(langs[langIdx]).suggest(ctx, style, 3, fuzzyOn)
+            val sug = suggesterFor(langs[langIdx])
+            val words = sug.suggest(ctx, style, 3, fuzzyOn)
+            val auto = if (autoCorrectOn && ctx.prefix.length >= 2 && ctx.prefix != suppressAutoFor) {
+                sug.autoCorrect(ctx, fuzzyOn)?.let { Suggester.caseLike(it, ctx.prefix) }
+            } else null
+            if (auto != null && auto != ctx.prefix) {
+                // o'rtada: probelda qo'yiladigan tuzatish; chapda: yozilganning o'zi (qo'shtirnoqda)
+                val other = words.firstOrNull { it != auto && it != ctx.prefix }
+                stripCommit = listOfNotNull(auto, ctx.prefix, other)
+                strip.suggestions = listOfNotNull(auto, "“${ctx.prefix}”", other)
+                strip.highlightBest = true
+            } else {
+                stripCommit = words
+                strip.suggestions = words
+                strip.highlightBest = false
+            }
         } catch (t: Throwable) {
-            strip.suggestions = emptyList()
+            clearStrip(strip)
         }
     }
 
+    /**
+     * Probel yoki tinish belgisidan oldin: yozilgan so'z ishonchli tarzda tuzatiladigan bo'lsa, almashtiradi.
+     * (asl so'z, qo'yilgan so'z) qaytaradi — orqaga o'chirish tugmasi bilan qaytarish uchun.
+     */
+    private fun maybeAutoCorrect(ic: InputConnection): Pair<String, String>? {
+        if (!autoCorrectOn || !predictOn || page != Page.LETTERS) return null
+        return try {
+            val before = ic.getTextBeforeCursor(80, 0) ?: return null
+            val ctx = ContextParser.parse(before)
+            val raw = ctx.prefix
+            if (raw.length < 2) return null
+            if (raw == suppressAutoFor) {
+                suppressAutoFor = null
+                return null
+            }
+            val fixed = suggesterFor(langs[langIdx]).autoCorrect(ctx, fuzzyOn) ?: return null
+            val cased = Suggester.caseLike(fixed, raw)
+            if (cased == raw) return null
+            ic.beginBatchEdit()
+            ic.deleteSurroundingText(raw.length, 0)
+            ic.commitText(cased, 1)
+            ic.endBatchEdit()
+            raw to cased
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
+    /** Avtomatik tuzatishdan keyin darhol orqaga o'chirish bosilsa: asl so'zni qaytaradi. */
+    private fun undoAutoCorrect(ic: InputConnection): Boolean {
+        val last = lastAutoCorrect ?: return false
+        lastAutoCorrect = null
+        val (original, inserted) = last
+        val before = ic.getTextBeforeCursor(inserted.length, 0)?.toString() ?: return false
+        if (before != inserted) return false
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(inserted.length, 0)
+        ic.commitText(original, 1)
+        ic.endBatchEdit()
+        suppressAutoFor = original
+        return true
+    }
+
     private fun onSuggestion(index: Int) {
-        val strip = root?.strip ?: return
-        val word = strip.suggestions.getOrNull(index) ?: return
+        val word = stripCommit.getOrNull(index) ?: return
         val ic = currentInputConnection ?: return
+        lastAutoCorrect = null
         try {
             val before = ic.getTextBeforeCursor(80, 0) ?: ""
             val ctx = ContextParser.parse(before)
@@ -300,26 +377,38 @@ class AlifboIme : InputMethodService(), KeyboardListener {
 
     override fun onText(text: String) {
         val ic = currentInputConnection ?: return
-        if (text.isNotEmpty() && !ContextParser.isWordChar(text[0])) learnFromCursor(ic)
+        lastAutoCorrect = null
+        val boundary = text.isNotEmpty() && !ContextParser.isWordChar(text[0])
+        val corrected = if (boundary && text.length == 1 && text[0] in ",.!?;:") maybeAutoCorrect(ic) else null
+        if (boundary) learnFromCursor(ic)
         if (justAccepted && text.length == 1 && text[0] in ",.!?;:") {
             if (ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
         }
         justAccepted = false
         ic.commitText(text, 1)
+        if (corrected != null) lastAutoCorrect = corrected.first to corrected.second + text
         afterInput()
     }
 
     override fun onSpace() {
         val ic = currentInputConnection ?: return
+        lastAutoCorrect = null
+        val corrected = maybeAutoCorrect(ic)
         learnFromCursor(ic)
         justAccepted = false
         ic.commitText(" ", 1)
+        if (corrected != null) lastAutoCorrect = corrected.first to corrected.second + " "
         afterInput()
     }
 
     override fun onDelete() {
         val ic = currentInputConnection ?: return
         justAccepted = false
+        if (undoAutoCorrect(ic)) {
+            updateAutoCap()
+            refreshSuggestions()
+            return
+        }
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) ic.commitText("", 1)
         else sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
@@ -330,6 +419,8 @@ class AlifboIme : InputMethodService(), KeyboardListener {
     override fun onEnter() {
         val info = currentInputEditorInfo ?: return
         val ic = currentInputConnection ?: return
+        lastAutoCorrect = null
+        maybeAutoCorrect(ic)
         learnFromCursor(ic)
         justAccepted = false
         val action = info.imeOptions and EditorInfo.IME_MASK_ACTION

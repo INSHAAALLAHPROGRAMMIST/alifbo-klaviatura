@@ -218,6 +218,14 @@ class SettingsActivity : Activity() {
         val c = card("Söz tahmini")
         switchRow(c, "Tahmin qatori", prefs.predict) { prefs.predict = it }
         switchRow(c, "Shaxsiy örganiş", prefs.learn) { prefs.learn = it }
+        switchRow(c, "Avtomatik tuzatiş", prefs.autoCorrect) { prefs.autoCorrect = it }
+        c.addView(
+            label(
+                "Probel yoki tinish belgisi bosilganda xato yozilgan söz tuzatiladi (masalan yaxsi → yaxşi, " +
+                    "shahar → şahar). Darhol orqaga öçiriş tugmasini bossangiz, yozganingiz qaytadi.",
+                12f, muted,
+            ),
+        )
         switchRow(c, "Eski yozuvdan yordam", prefs.oldSpellingHelp) { prefs.oldSpellingHelp = it }
         c.addView(
             label(

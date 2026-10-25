@@ -13,21 +13,33 @@ Maket 2026-yil 21-oktyabrda imzolangan **O'RQ-1184-son** qonundagi alifboga asos
 A B D E F G Ğ H I J K L M N O Ö P Q R S Ş Ç T U V X Y Z   +  ʼ (tutuq belgisi, U+02BC)
 ```
 
-`w` va `c` yöq, şuning uçun `ğ` — `w` o'rnida, `ç` — `c` o'rnida; `ş` va `ö` qatorlar oxirida.
+QWERTY joylashuvi to'liq saqlangan (10 / 9 / 7 tugma): `w` örnida tutuq belgisi `ʼ`, `c` örnida `ç`;
+`ş`, `ğ`, `ö` esa `s`, `g`, `o` tugmalari içida — burçakda kiçik harf bölib körinadi, tugmani
+yuqoriga sürib yoki uzoq bosib yoziladi.
 Katta harf `Locale.ROOT` bilan: `i → I` (turkcha `İ` emas).
 
 ## Maketlar
 
 | Til | Qatorlar |
 |---|---|
-| Özbek (yangi alifbo) | `q ğ e r t y u i o p` / `a s d f g h j k l ş` / `z x ç v b n m ö` |
+| Özbek (yangi alifbo) | `q ʼ e r t y u i o p` / `a s d f g h j k l` / `z x ç v b n m` (+ `ş ğ ö` içida) |
 | English (US) | QWERTY, uzoq bosganda aksentlar |
 | Русский | ЙЦУКЕН (`ё` — `е` ustida, `ъ` — `ь` ustida) |
 | Ўзбек (кирилл) | ЙЦУКЕН + `ў қ ғ ҳ`, `ъ` alohida tugma |
 
 Hamma tillarda: yuqori qatordagi harfni uzoq bosiş — raqam; `?123` va `=\<` sahifalarida
 `! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ ` { | } ~` va `« » “ ” – — € £ ¥ ₽ ₸ № °`.
-Probelni yonga surişş — tilni almaştiradi; glob tugmasini uzoq bosiş — til tanlagiç.
+Har qanday tugmani yuqoriga sürish — uning birinçi qö'şimça belgisi (yaşirin harf yoki raqam).
+Probelni yonga sürish yoki globusni bosiş — tilni almaştiradi; globus içida emoji ham bor:
+globusni yuqoriga sürish — emoji paneli, uzoq bosiş — emoji va til tanlagiç.
+
+## Tuzatiş
+
+Yozilgan söz lug'atda bölmasa, tuzatilgan şakli tahmin qatorining örtasida çiqadi. Yangi alifbo
+harflariga oid xatolar (`sh → ş`, `oʼ/o'/o\` → ö`, `gʼ → ğ`, `s → ş`, `o → ö`, `g → ğ`) eng yuqori
+ustunlikda, keyin oddiy xatolar (bitta harf tuşgan, ortiqça, almaşgan yoki örni almaşgan).
+Avtomatik tuzatiş yoniq bölsa, probel yoki tinish belgisi bosilganda söz almaştiriladi
+(tuzatiş urğu rangida körsatiladi); darhol orqaga öçiriş — asl söz qaytadi va endi tuzatilmaydi.
 
 ## Xavfsizlik
 

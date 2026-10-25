@@ -52,6 +52,12 @@ class KeyboardView(context: Context) : View(context) {
         var swiped = false
         var anchorX = 0f
         var repeats = 0
+
+        // yuqoriga surish: tugmaning birinchi qo'shimcha belgisi (s -> ş, birinchi qatorda raqam)
+        var startCell: Cell? = null
+        var downX = 0f
+        var downY = 0f
+        var flick = false
         val longPress = Runnable { onLongPress(this) }
         val repeat: Runnable = object : Runnable {
             override fun run() {
@@ -235,18 +241,34 @@ class KeyboardView(context: Context) : View(context) {
             Kind.SHIFT -> Icons.shift(canvas, iconPaint, cx, cy, iconSize, if (casing) shift else Shift.OFF)
             Kind.DELETE -> Icons.delete(canvas, iconPaint, cx, cy, iconSize)
             Kind.ENTER -> Icons.enter(canvas, iconPaint, cx, cy, iconSize, enterStyle)
-            Kind.LANGUAGE -> Icons.globe(canvas, iconPaint, cx, cy, iconSize)
+            Kind.LANGUAGE -> {
+                Icons.globe(canvas, iconPaint, cx, cy, iconSize)
+                // emoji globus ichida: burchakda kichik yuzcha (yuqoriga surish / uzoq bosish)
+                iconPaint.color = theme.hint
+                val s = keyHeightPx * 0.2f
+                Icons.face(canvas, iconPaint, body.right - dp(6f) - s / 2f, body.top + dp(5f) + s / 2f, s)
+            }
             Kind.EMOJI -> Icons.face(canvas, iconPaint, cx, cy, iconSize)
             Kind.SPACER -> {}
         }
 
+        // yashirin harf (s ichidagi ş va h.k.) har doim burchakda ko'rinadi
+        if (k.kind == Kind.CHAR && k.hint.isNotEmpty()) {
+            textPaint.color = theme.hint
+            textPaint.typeface = faceMedium
+            textPaint.textSize = keyHeightPx * 0.22f * textScale
+            val h = if (casing && shift != Shift.OFF) k.hint.upperUz() else k.hint
+            canvas.drawText(h, body.right - dp(7f), body.top + textPaint.textSize + dp(1f), textPaint)
+        }
         if (showHints && !hasNumberRow && k.kind == Kind.CHAR && c.row == 0) {
-            val d = k.popup.firstOrNull()
-            if (d != null && d.length == 1 && d[0].isDigit()) {
+            val d = k.popup.firstOrNull { it.length == 1 && it[0].isDigit() }
+            if (d != null) {
                 textPaint.color = theme.hint
                 textPaint.typeface = faceRegular
                 textPaint.textSize = keyHeightPx * 0.2f * textScale
-                canvas.drawText(d, body.right - dp(6f), body.top + textPaint.textSize + dp(1f), textPaint)
+                // yashirin harf o'ng burchakni egallagan bo'lsa, raqam chap burchakda
+                val x = if (k.hint.isNotEmpty()) body.left + dp(7f) else body.right - dp(6f)
+                canvas.drawText(d, x, body.top + textPaint.textSize + dp(1f), textPaint)
             }
         }
     }
@@ -301,6 +323,9 @@ class KeyboardView(context: Context) : View(context) {
         val p = Ptr()
         p.cell = cell
         p.anchorX = x
+        p.startCell = cell
+        p.downX = x
+        p.downY = y
         ptrs.put(id, p)
         haptic(false)
         enterKey(p, cell, true)
@@ -331,6 +356,27 @@ class KeyboardView(context: Context) : View(context) {
                 overlay?.setPopupSelection(idx)
             }
             return
+        }
+        // yuqoriga surish (flick): barmoq tugmadan yuqoriga ketsa — qo'shimcha belgi
+        val sc = p.startCell
+        val flickable = sc != null && !p.fired &&
+            ((sc.key.kind == Kind.CHAR && sc.key.popup.isNotEmpty()) || sc.key.kind == Kind.LANGUAGE)
+        if (sc != null && flickable) {
+            val upward = y - p.downY < -keyHeightPx * 0.45f && abs(x - p.downX) < sc.outer.width() * 0.9f
+            if (upward != p.flick) {
+                p.flick = upward
+                ui.removeCallbacks(p.longPress)
+                p.cell = sc
+                if (upward) {
+                    showPreview(sc, flickText(sc.key))
+                    haptic(false)
+                } else {
+                    showPreview(sc)
+                    ui.postDelayed(p.longPress, longPressMs)
+                }
+                invalidate()
+            }
+            if (p.flick) return
         }
         val cur = p.cell ?: return
         if (cur.key.kind == Kind.SPACE) {
@@ -366,11 +412,20 @@ class KeyboardView(context: Context) : View(context) {
         ui.removeCallbacks(p.repeat)
         overlay?.hidePreview()
         val items = p.popupItems
-        if (items != null) {
+        val sc = p.startCell
+        if (p.flick && sc != null) {
+            if (sc.key.kind == Kind.LANGUAGE) listener?.onEmoji() else listener?.onText(flickText(sc.key))
+        } else if (items != null) {
             overlay?.hidePopup()
             val sel = p.popupSel.coerceIn(0, items.size - 1)
-            if (p.popupMode == 1) listener?.onText(items[sel])
-            else if (p.popupMode == 2) listener?.onLanguagePick(if (sel < langShorts.size) sel else -1)
+            if (p.popupMode == 1) {
+                listener?.onText(items[sel])
+            } else if (p.popupMode == 2) {
+                // 0 = emoji, keyin tillar, oxirida tizim klaviatura tanlagichi
+                val lang = sel - 1
+                if (sel == 0) listener?.onEmoji()
+                else listener?.onLanguagePick(if (lang < langShorts.size) lang else -1)
+            }
         } else if (!p.fired && !p.swiped) {
             p.cell?.let { activate(it.key) }
         }
@@ -420,7 +475,7 @@ class KeyboardView(context: Context) : View(context) {
                 val items = key.popup.map { if (casing && shift != Shift.OFF) it.upperUz() else it }
                 openPopup(p, cell, items, 1, 40f)
             }
-            Kind.LANGUAGE -> openPopup(p, cell, langShorts + "···", 2, 48f)
+            Kind.LANGUAGE -> openPopup(p, cell, listOf(EMOJI_FACE) + langShorts + "···", 2, 48f)
             Kind.SHIFT -> {
                 p.fired = true
                 haptic(true)
@@ -465,9 +520,16 @@ class KeyboardView(context: Context) : View(context) {
         return best
     }
 
-    private fun showPreview(cell: Cell) {
+    private fun showPreview(cell: Cell, label: String = labelFor(cell.key)) {
         val ov = overlay ?: return
-        ov.showPreview(toOverlay(cell.inner), labelFor(cell.key), keyHeightPx, cornerPx)
+        ov.showPreview(toOverlay(cell.inner), label, keyHeightPx, cornerPx)
+    }
+
+    /** Yuqoriga surilganda yoziladigan belgi: popup'dagi birinchisi (yashirin harf yoki raqam); globusda — emoji. */
+    private fun flickText(key: Key): String {
+        if (key.kind == Kind.LANGUAGE) return EMOJI_FACE
+        val s = key.popup.first()
+        return if (casing && shift != Shift.OFF) s.upperUz() else s
     }
 
     private fun toOverlay(r: RectF): RectF {
@@ -484,5 +546,10 @@ class KeyboardView(context: Context) : View(context) {
             )
         }
         if (soundOn) playSoundEffect(SoundEffectConstants.CLICK)
+    }
+
+    private companion object {
+        /** 😀 — globus tugmasidagi emoji panelini bildiradi. */
+        val EMOJI_FACE: String = String(Character.toChars(0x1F600))
     }
 }

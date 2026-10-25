@@ -1,6 +1,7 @@
 package uz.alifbo.klaviatura
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,15 +30,26 @@ class LayoutsTest {
             0x6F, 0xF6, 0x70, 0x71, 0x72, 0x73, 0x15F, 0xE7, 0x74, 0x75, 0x76, 0x78, 0x79, 0x7A,
         )
         assertEquals(28, expected.size)
-        val actual = primaryLetters(Layouts.letters(Lang.UZ))
-        assertEquals("takrorlangan harf bor: $actual", actual.size, actual.toSet().size)
-        assertEquals(expected, actual.toSet())
+        val keys = Layouts.letters(Lang.UZ).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        val visible = keys.map { it.label }.filter { it != Layouts.TUTUQ }
+        assertEquals("takrorlangan harf bor: $visible", visible.size, visible.toSet().size)
+        // ş ğ ö — s, g, o tugmalari ichida yashirin; qolgan 25 harf ko'rinadi
+        val hidden = keys.map { it.hint }.filter { it.isNotEmpty() }
+        assertEquals(cp(0x15F, 0x11F, 0xF6), hidden.toSet())
+        assertEquals(25, visible.size)
+        assertEquals(expected, (visible + hidden).toSet())
+        assertEquals(String(Character.toChars(0x15F)), keys.first { it.label == "s" }.hint)
+        assertEquals(String(Character.toChars(0x11F)), keys.first { it.label == "g" }.hint)
+        assertEquals(String(Character.toChars(0xF6)), keys.first { it.label == "o" }.hint)
+        // yashirin harf uzoq bosish va yuqoriga surishda birinchi
+        for (k in keys) if (k.hint.isNotEmpty()) assertEquals(k.hint, k.popup.first())
     }
 
     @Test
-    fun ozbekLotin_tutuqBelgisiBor() {
-        val bottom = Layouts.letters(Lang.UZ).rows.last()
-        assertTrue(bottom.any { it.kind == Kind.CHAR && it.label == String(Character.toChars(0x02BC)) })
+    fun ozbekLotin_tutuqBelgisiHarflarQatorida() {
+        val l = Layouts.letters(Lang.UZ)
+        assertTrue(l.rows.first().any { it.kind == Kind.CHAR && it.label == String(Character.toChars(0x02BC)) })
+        assertFalse(l.rows.last().any { it.label == Layouts.TUTUQ })
     }
 
     @Test

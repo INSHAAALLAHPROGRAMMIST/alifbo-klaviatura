@@ -15,6 +15,8 @@ data class Key(
     val label: String = "",
     val weight: Float = 1f,
     val popup: List<String> = emptyList(),
+    /** Tugma ichiga "yashirilgan" harf (masalan s ichida ş): burchakda ko'rsatiladi, popup'da birinchi. */
+    val hint: String = "",
 )
 
 /** Qatorlarning og'irliklari yig'indisi bir xil bo'ladi (harf tugmalari hamma qatorda teng kenglikda). */
@@ -48,14 +50,19 @@ object Layouts {
         val r2: List<String>,
         val r3: List<String>,
         val extra: Map<String, List<String>> = emptyMap(),
+        val hidden: Map<String, String> = emptyMap(),
     )
 
     private val specs: Map<Lang, Spec> = mapOf(
         // Qonun (O'RQ-1184, 21.10.2026) alifbosi: Ö Ğ Ş Ç; w va c yo'q -> w o'rniga ğ, c o'rniga ç.
+        // ş, ğ, ö — s, g, o tugmalari ichida (uzoq bosish yoki yuqoriga surish); tutuq belgisi w o'rnida.
+        // Natijada QWERTY joylashuvi to'liq saqlanadi: 10 / 9 / 7 tugma.
         Lang.UZ to Spec(
-            r1 = listOf("q", "ğ", "e", "r", "t", "y", "u", "i", "o", "p"),
-            r2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l", "ş"),
-            r3 = listOf("z", "x", "ç", "v", "b", "n", "m", "ö"),
+            r1 = listOf("q", TUTUQ, "e", "r", "t", "y", "u", "i", "o", "p"),
+            r2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+            r3 = listOf("z", "x", "ç", "v", "b", "n", "m"),
+            extra = mapOf(TUTUQ to listOf("'", RSQUO, OKINA)),
+            hidden = mapOf("s" to "ş", "g" to "ğ", "o" to "ö"),
         ),
         Lang.EN to Spec(
             r1 = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
@@ -100,11 +107,13 @@ object Layouts {
     private fun spacer(w: Float) = Key(Kind.SPACER, "", w)
 
     private fun letterKey(label: String, spec: Spec, digitIndex: Int): Key {
+        val hidden = spec.hidden[label]
         val pop = buildList {
+            if (hidden != null) add(hidden)
             if (digitIndex in 0..9) add(DIGITS[digitIndex].toString())
             addAll(spec.extra[label].orEmpty())
         }
-        return Key(Kind.CHAR, label, 1f, pop)
+        return Key(Kind.CHAR, label, 1f, pop, hint = hidden ?: "")
     }
 
     private fun fit(row: List<Key>, total: Float): List<Key> {
@@ -124,15 +133,12 @@ object Layouts {
         // probel imkon qadar keng bo'lsin: qolgan tugmalar ixcham
         val keys = buildList {
             add(Key(modeKind, modeLabel, 1.2f))
-            add(Key(Kind.LANGUAGE, "", 0.9f))
-            add(Key(Kind.EMOJI, "", 0.9f))
+            // emoji globus ichida: bosish — keyingi til, yuqoriga surish yoki uzoq bosish — emoji
+            add(Key(Kind.LANGUAGE, "", 1f))
             add(Key(Kind.CHAR, ",", 0.8f))
             add(Key(Kind.SPACE, "", 1f))
-            when (lang) {
-                Lang.UZ -> add(Key(Kind.CHAR, TUTUQ, 0.8f, listOf("'", RSQUO, OKINA)))
-                Lang.EN -> add(Key(Kind.CHAR, "'", 0.8f, listOf(RSQUO)))
-                else -> {}
-            }
+            // o'zbekchada tutuq belgisi endi harflar qatorida
+            if (lang == Lang.EN) add(Key(Kind.CHAR, "'", 0.8f, listOf(RSQUO)))
             add(Key(Kind.CHAR, ".", 0.8f, dotPopup))
             add(Key(Kind.ENTER, "", 1.3f))
         }

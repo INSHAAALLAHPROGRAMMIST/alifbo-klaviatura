@@ -85,6 +85,10 @@ class ScreensTest {
         save("kiril_yorug", root(Themes.light, Lang.UZC, shift = Shift.ONCE, suggestions = listOf("Яхши", "Бугун", "Жуда")), screenW)
         save("rus_qora", root(Themes.dark, Lang.RU, suggestions = listOf("хочу", "не", "знаю")), screenW)
         save("belgilar_yorug", root(Themes.light, Lang.UZ, page = Page.SYM1, suggestions = emptyList()), screenW)
+        // o'zbek tiliga optimallashtirilgan "Tezkor" maket
+        val fast = root(Themes.light, Lang.UZ, suggestions = listOf("yaxşi", "bugun", "juda"))
+        fast.keyboard.setLayout(Layouts.letters(Lang.UZ, uzFastLayout = true))
+        save("tezkor_yorug", fast, screenW)
         // avtomatik tuzatish kutilmoqda: o'rtada urg'u rangida, chapda yozilganning o'zi
         val fix = root(Themes.light, Lang.UZ, suggestions = listOf("yaxşi", "“yaxsi”", "yaxşilab"))
         fix.strip.highlightBest = true

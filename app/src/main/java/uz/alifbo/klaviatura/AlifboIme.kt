@@ -149,7 +149,9 @@ class AlifboIme : InputMethodService(), KeyboardListener {
         k.langShorts = langs.map { it.short }
         k.shift = shift
         k.enterStyle = enter
-        k.setLayout(if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow) else Layouts.symbols(page))
+        k.setLayout(
+            if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow, prefs.uzFastLayout) else Layouts.symbols(page),
+        )
     }
 
     private fun dp(v: Float): Float = v * resources.displayMetrics.density

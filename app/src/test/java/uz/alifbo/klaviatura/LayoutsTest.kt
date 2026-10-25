@@ -46,6 +46,29 @@ class LayoutsTest {
     }
 
     @Test
+    fun tezkorMaket_xuddiShuHarflar_vaUnlilarChapda() {
+        val qwerty = Layouts.letters(Lang.UZ).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        val fast = Layouts.letters(Lang.UZ, uzFastLayout = true).rows.dropLast(1).flatten().filter { it.kind == Kind.CHAR }
+        // bir xil 26 belgi (25 harf + tutuq) va bir xil yashirin harflar
+        assertEquals(qwerty.map { it.label }.toSet(), fast.map { it.label }.toSet())
+        assertEquals(26, fast.size)
+        assertEquals(qwerty.map { it.hint }.filter { it.isNotEmpty() }.toSet(), fast.map { it.hint }.filter { it.isNotEmpty() }.toSet())
+        // unlilar a i o u e — chap yarmida (har qatorning chap qismi)
+        val l = Layouts.letters(Lang.UZ, uzFastLayout = true)
+        for (v in listOf("a", "i", "o", "u", "e")) {
+            val row = l.rows.first { r -> r.any { it.label == v } }
+            var x = 0f
+            for (k in row) {
+                if (k.label == v) break
+                x += k.weight
+            }
+            assertTrue("$v chapda emas", x + 0.5f < l.total / 2f)
+        }
+        // qatorlar og'irligi teng
+        for (row in l.rows) assertEquals(l.total.toDouble(), row.sumOf { it.weight.toDouble() }, 0.02)
+    }
+
+    @Test
     fun ozbekLotin_tutuqBelgisiHarflarQatorida() {
         val l = Layouts.letters(Lang.UZ)
         assertTrue(l.rows.first().any { it.kind == Kind.CHAR && it.label == String(Character.toChars(0x02BC)) })

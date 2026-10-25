@@ -54,6 +54,11 @@ class Prefs(private val context: Context) {
         get() = bool("hints", false)
         set(v) = putBool("hints", v)
 
+    /** O'zbek lotin uchun "Tezkor" (o'zbek tiliga optimallashtirilgan) maket; false = QWERTY. */
+    var uzFastLayout: Boolean
+        get() = bool("uzFast", false)
+        set(v) = putBool("uzFast", v)
+
     /** Tahmin qatori (so'z takliflari). */
     var predict: Boolean
         get() = bool("predict", true)

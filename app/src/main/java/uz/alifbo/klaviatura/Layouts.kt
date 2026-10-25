@@ -145,8 +145,21 @@ object Layouts {
         return scaleAndFit(keys, total)
     }
 
-    fun letters(lang: Lang, numberRow: Boolean = false): KbLayout {
-        val spec = specs.getValue(lang)
+    /**
+     * "Tezkor" o'zbek maketi: tools/optimize-layout.mjs topgan (113 mln so'zli korpus chastotasi, ikki bosh
+     * barmoq modeli). Unlilar chap bosh barmoqda, undoshlar o'ngda — o'zbek bo'g'inlarida barmoqlar
+     * navbatlashadi (80%, QWERTY'da 50%); model bo'yicha ~34% kam vaqt. ş/ğ/ö yana s/g/o ichida.
+     */
+    private val uzFast = Spec(
+        r1 = listOf(TUTUQ, "x", "p", "f", "e", "z", "m", "q", "v", "h"),
+        r2 = listOf("j", "o", "u", "ç", "y", "d", "l", "s", "k"),
+        r3 = listOf("a", "g", "i", "b", "n", "r", "t"),
+        extra = mapOf(TUTUQ to listOf("'", RSQUO, OKINA)),
+        hidden = mapOf("s" to "ş", "g" to "ğ", "o" to "ö"),
+    )
+
+    fun letters(lang: Lang, numberRow: Boolean = false, uzFastLayout: Boolean = false): KbLayout {
+        val spec = if (lang == Lang.UZ && uzFastLayout) uzFast else specs.getValue(lang)
         val total = maxOf(spec.r1.size, spec.r2.size, spec.r3.size + 2).toFloat()
         val rows = mutableListOf<List<Key>>()
         if (numberRow) {

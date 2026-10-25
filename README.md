@@ -29,6 +29,27 @@ Katta harf `Locale.ROOT` bilan: `i → I` (turkcha `İ` emas).
 
 Hamma tillarda: yuqori qatordagi harfni uzoq bosiş — raqam; `?123` va `=\<` sahifalarida
 `! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] ^ _ ` { | } ~` va `« » “ ” – — € £ ¥ ₽ ₸ № °`.
+### Tezkor maket (özbek tiliga optimallaştirilgan)
+
+Sozlamalarda QWERTY örniga tanlanadi. `tools/optimize-layout.mjs` hisoblagan: harf va harf
+juftlari çastotasi 113 mln sözli özbekça modeldan, yoziş vaqti ikki baş barmoqli Fitts modelidan
+(bitta barmoq ketma-ket bossa masofaga qarab sekinroq, navbatlaşsa tez), keyin millionlab
+joylaşuv ichidan eng tezi topildi (bir necha boşlang'ich nuqtadan bir xil natija):
+
+```
+ʼ x p f e │ z m q v h
+ j o u ç  │ y d l s k
+   a g i  │ b n r t
+```
+
+Unlilar chap, undoşlar ö'ng baş barmoqda: barmoq navbatlaşuvi 80% (QWERTY'da 50%), model bölyiça
+bir harfga 172 ms (QWERTY'da 259 ms), ya'ni ~34% tez. Bu nazariy baho; amalda könikiş uçun
+bir necha hafta kerak.
+
+```
+node tools/optimize-layout.mjs app/src/main/assets/lm_uz.bin --iters 600000 --restarts 8 --seed 7
+```
+
 Har qanday tugmani yuqoriga sürish — uning birinçi qö'şimça belgisi (yaşirin harf yoki raqam).
 Probelni yonga sürish yoki globusni bosiş — tilni almaştiradi; globus içida emoji ham bor:
 globusni yuqoriga sürish — emoji paneli, uzoq bosiş — emoji va til tanlagiç.

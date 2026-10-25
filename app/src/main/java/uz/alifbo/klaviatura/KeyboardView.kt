@@ -242,11 +242,12 @@ class KeyboardView(context: Context) : View(context) {
             Kind.DELETE -> Icons.delete(canvas, iconPaint, cx, cy, iconSize)
             Kind.ENTER -> Icons.enter(canvas, iconPaint, cx, cy, iconSize, enterStyle)
             Kind.LANGUAGE -> {
-                Icons.globe(canvas, iconPaint, cx, cy, iconSize)
+                // globus biroz kichikroq va chapga-pastga: burchakdagi yuzchaga tegmasin
+                Icons.globe(canvas, iconPaint, cx - dp(2.5f), cy + dp(2f), iconSize * 0.86f)
                 // emoji globus ichida: burchakda kichik yuzcha (yuqoriga surish / uzoq bosish)
                 iconPaint.color = theme.hint
-                val s = keyHeightPx * 0.2f
-                Icons.face(canvas, iconPaint, body.right - dp(6f) - s / 2f, body.top + dp(5f) + s / 2f, s)
+                val s = keyHeightPx * 0.19f
+                Icons.face(canvas, iconPaint, body.right - dp(5f) - s / 2f, body.top + dp(4f) + s / 2f, s)
             }
             Kind.EMOJI -> Icons.face(canvas, iconPaint, cx, cy, iconSize)
             Kind.SPACER -> {}

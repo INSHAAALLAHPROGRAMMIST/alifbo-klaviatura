@@ -163,7 +163,8 @@ class StripView(context: Context) : View(context) {
         text.color = theme.text
         text.typeface = Typeface.DEFAULT
         text.textSize = dp(14f)
-        val avail = rect.width() - dp(40f)
+        // chapda 30dp belgi, o'ngda 14dp bo'sh joy qolsin
+        val avail = rect.width() - dp(44f)
         val oneLine = clip.replace('\n', ' ').replace('\t', ' ').trim()
         val shown = TextUtils.ellipsize(oneLine, text, avail, TextUtils.TruncateAt.END).toString()
         val fm = text.fontMetrics

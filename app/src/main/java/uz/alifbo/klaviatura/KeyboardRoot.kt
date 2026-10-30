@@ -83,7 +83,7 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
             body.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
         }
         panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h }
-        panel.handler = handler
+        panel.clipHandler = handler
         panel.applyTheme(theme)
         panel.setItems(items)
         panel.visibility = View.VISIBLE

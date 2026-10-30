@@ -24,7 +24,7 @@ interface ClipboardHandler {
  * ☆ — qadab qo'yish (tozalashda o'chmaydi), ✕ — o'chirish, "Tozalash" — qadalmaganlarni o'chirish.
  */
 class ClipboardPanel(context: Context, private val onBack: () -> Unit) : LinearLayout(context) {
-    var handler: ClipboardHandler? = null
+    var clipHandler: ClipboardHandler? = null
     private var theme: KbTheme = Themes.light
     private var items: List<Clip> = emptyList()
 
@@ -48,7 +48,7 @@ class ClipboardPanel(context: Context, private val onBack: () -> Unit) : LinearL
         clear.text = "Tozalaş"
         clear.textSize = 14f
         clear.setPadding(dp(12f).toInt(), dp(6f).toInt(), dp(12f).toInt(), dp(6f).toInt())
-        clear.setOnClickListener { handler?.onClipClear() }
+        clear.setOnClickListener { clipHandler?.onClipClear() }
         header.addView(clear)
         addView(header, LayoutParams(LayoutParams.MATCH_PARENT, dp(40f).toInt()))
 
@@ -101,7 +101,7 @@ class ClipboardPanel(context: Context, private val onBack: () -> Unit) : LinearL
                 gravity = Gravity.CENTER_VERTICAL
                 background = rounded(theme.key, 10f)
                 setPadding(pad + dp(2f).toInt(), pad, dp(4f).toInt(), pad)
-                setOnClickListener { handler?.onClipPaste(c.text) }
+                setOnClickListener { clipHandler?.onClipPaste(c.text) }
             }
             val body = TextView(context).apply {
                 text = c.text
@@ -116,7 +116,7 @@ class ClipboardPanel(context: Context, private val onBack: () -> Unit) : LinearL
                 textSize = 18f
                 setTextColor(if (c.pinned) theme.accent else theme.hint)
                 setPadding(dp(10f).toInt(), dp(4f).toInt(), dp(6f).toInt(), dp(4f).toInt())
-                setOnClickListener { handler?.onClipPin(c.text) }
+                setOnClickListener { clipHandler?.onClipPin(c.text) }
             }
             row.addView(pin)
             val del = TextView(context).apply {
@@ -124,7 +124,7 @@ class ClipboardPanel(context: Context, private val onBack: () -> Unit) : LinearL
                 textSize = 15f
                 setTextColor(theme.hint)
                 setPadding(dp(8f).toInt(), dp(4f).toInt(), dp(8f).toInt(), dp(4f).toInt())
-                setOnClickListener { handler?.onClipDelete(c.text) }
+                setOnClickListener { clipHandler?.onClipDelete(c.text) }
             }
             row.addView(del)
             list.addView(row, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {

@@ -6,14 +6,20 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 
-/** IME oynasining ildiz ko'rinishi: tepada qator, o'rtada klaviatura (yoki emoji paneli), eng ustida qatlam. */
+/**
+ * IME oynasining ildiz ko'rinishi: tepada tarjima qatori (yashirin bo'lishi mumkin) va tahmin qatori,
+ * o'rtada klaviatura (yoki emoji / bufer / parollar paneli), eng ustida qatlam.
+ */
 class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(context) {
+    val trBar = TranslateBar(context)
     val strip = StripView(context)
     val keyboard = KeyboardView(context)
     val overlay = OverlayView(context)
 
     private val body = FrameLayout(context)
     private var emoji: EmojiPanel? = null
+    private var clipboard: ClipboardPanel? = null
+    private var vault: VaultPanel? = null
     private var theme: KbTheme = Themes.light
 
     private val onEmojiPick: (String) -> Unit
@@ -28,6 +34,8 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
         onEmojiBack = { hideEmoji() }
 
         val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        trBar.visibility = View.GONE
+        column.addView(trBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(strip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(STRIP_DP).toInt()))
         body.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -40,26 +48,43 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     fun applyTheme(t: KbTheme) {
         theme = t
         setBackgroundColor(t.background)
+        trBar.applyTheme(t)
         strip.theme = t
         keyboard.theme = t
         overlay.theme = t
         keyboard.invalidate()
         emoji?.applyTheme(t)
         clipboard?.applyTheme(t)
+        vault?.applyTheme(t)
     }
 
     val isEmojiShown: Boolean get() = emoji?.visibility == View.VISIBLE
+    val isClipboardShown: Boolean get() = clipboard?.visibility == View.VISIBLE
+    val isVaultShown: Boolean get() = vault?.visibility == View.VISIBLE
+    val isTranslateShown: Boolean get() = trBar.visibility == View.VISIBLE
 
-    private fun panelHeight(): Int = if (keyboard.height > 0) keyboard.height else keyboard.measuredHeight
+    /** Panel klaviatura bilan bir xil balandlikda (boshqa panel ochiq bo'lsa — o'shaniki). */
+    private fun panelHeight(): Int {
+        if (keyboard.visibility == View.VISIBLE && keyboard.height > 0) return keyboard.height
+        for (p in listOf<View?>(emoji, clipboard, vault)) {
+            if (p != null && p.visibility == View.VISIBLE && p.height > 0) return p.height
+        }
+        return if (keyboard.height > 0) keyboard.height else keyboard.measuredHeight
+    }
+
+    private fun anyPanelShown(): Boolean = isEmojiShown || isClipboardShown || isVaultShown
+
+    private fun place(panel: View, h: Int) {
+        if (panel.parent == null) body.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
+        panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h }
+    }
 
     fun showEmoji(listener: KeyboardListener) {
         val h = panelHeight()
-        hideClipboard()
-        val panel = emoji ?: EmojiPanel(context, onEmojiPick, onEmojiDelete, onEmojiBack).also {
-            emoji = it
-            body.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
-        }
-        panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h }
+        clipboard?.visibility = View.GONE
+        vault?.visibility = View.GONE
+        val panel = emoji ?: EmojiPanel(context, onEmojiPick, onEmojiDelete, onEmojiBack).also { emoji = it }
+        place(panel, h)
         panel.applyTheme(theme)
         panel.visibility = View.VISIBLE
         keyboard.visibility = View.GONE
@@ -67,22 +92,16 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
 
     fun hideEmoji() {
         emoji?.visibility = View.GONE
-        if (clipboard?.visibility != View.VISIBLE) keyboard.visibility = View.VISIBLE
+        if (!anyPanelShown()) keyboard.visibility = View.VISIBLE
     }
-
-    private var clipboard: ClipboardPanel? = null
-
-    val isClipboardShown: Boolean get() = clipboard?.visibility == View.VISIBLE
 
     /** Nusxalar tarixi paneli klaviatura o'rnida (bir xil balandlikda). */
     fun showClipboard(items: List<Clip>, handler: ClipboardHandler) {
-        val h = if (isEmojiShown) emoji!!.height else panelHeight()
+        val h = panelHeight()
         emoji?.visibility = View.GONE
-        val panel = clipboard ?: ClipboardPanel(context) { hideClipboard() }.also {
-            clipboard = it
-            body.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
-        }
-        panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h }
+        vault?.visibility = View.GONE
+        val panel = clipboard ?: ClipboardPanel(context) { hideClipboard() }.also { clipboard = it }
+        place(panel, h)
         panel.clipHandler = handler
         panel.applyTheme(theme)
         panel.setItems(items)
@@ -96,7 +115,42 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
 
     fun hideClipboard() {
         clipboard?.visibility = View.GONE
-        if (!isEmojiShown) keyboard.visibility = View.VISIBLE
+        if (!anyPanelShown()) keyboard.visibility = View.VISIBLE
+    }
+
+    /** Parollar paneli klaviatura o'rnida. */
+    fun showVault(state: VaultState, handler: VaultHandler) {
+        val h = panelHeight()
+        emoji?.visibility = View.GONE
+        clipboard?.visibility = View.GONE
+        val panel = vault ?: VaultPanel(context) { hideVault() }.also { vault = it }
+        place(panel, h)
+        panel.vaultHandler = handler
+        panel.applyTheme(theme)
+        panel.setState(state)
+        panel.visibility = View.VISIBLE
+        keyboard.visibility = View.GONE
+    }
+
+    fun updateVault(state: VaultState) {
+        vault?.takeIf { it.visibility == View.VISIBLE }?.setState(state)
+    }
+
+    fun hideVault() {
+        vault?.visibility = View.GONE
+        if (!anyPanelShown()) keyboard.visibility = View.VISIBLE
+    }
+
+    fun showTranslate(handler: TranslateHandler) {
+        trBar.trHandler = handler
+        trBar.closePicker()
+        trBar.visibility = View.VISIBLE
+        strip.activeTool = 1
+    }
+
+    fun hideTranslate() {
+        trBar.visibility = View.GONE
+        if (strip.activeTool == 1) strip.activeTool = -1
     }
 
     companion object {

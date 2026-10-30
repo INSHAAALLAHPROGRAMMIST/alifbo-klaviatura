@@ -125,6 +125,34 @@ object Icons {
         c.drawPath(place(clipboardTop, cx, cy, s), p)
     }
 
+    private val keyPath = Path().apply {
+        addCircle(-0.48f, 0f, 0.36f, Path.Direction.CW)
+        moveTo(-0.12f, 0f); lineTo(0.92f, 0f)
+        moveTo(0.58f, 0f); lineTo(0.58f, 0.32f)
+        moveTo(0.82f, 0f); lineTo(0.82f, 0.26f)
+    }
+
+    /** Parollar belgisi: kalit. */
+    fun key(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
+        stroke(p, s)
+        p.strokeWidth = s * 0.1f
+        c.drawPath(place(keyPath, cx, cy, s), p)
+    }
+
+    private val diceBox = Path().apply {
+        addRoundRect(RectF(-0.8f, -0.8f, 0.8f, 0.8f), 0.25f, 0.25f, Path.Direction.CW)
+    }
+
+    /** Kuchli parol taklifi belgisi: o'yin toshi (tasodif). */
+    fun dice(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
+        stroke(p, s)
+        p.strokeWidth = s * 0.09f
+        c.drawPath(place(diceBox, cx, cy, s), p)
+        p.style = Paint.Style.FILL
+        val u = s / 2f
+        for ((x, y) in listOf(-0.38f to -0.38f, 0f to 0f, 0.38f to 0.38f)) c.drawCircle(cx + x * u, cy + y * u, 0.13f * u, p)
+    }
+
     fun globe(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
         stroke(p, s)
         p.strokeWidth = s * 0.075f

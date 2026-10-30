@@ -1,20 +1,30 @@
 package uz.alifbo.klaviatura
 
+import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.inputmethodservice.InputMethodService
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
 import android.view.KeyEvent
 import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import java.io.File
+import java.util.concurrent.Executors
 
-class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
+class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, TranslateHandler, VaultHandler {
 
     private lateinit var prefs: Prefs
     private var root: KeyboardRoot? = null
@@ -46,13 +56,49 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     private val personals = HashMap<String, PersonalModel>()
     private val suggesters = HashMap<String, Suggester>()
 
-    // bufer (nusxalar tarixi) va tarjima
+    // bufer (nusxalar tarixi)
     private var clipboard: ClipboardStore? = null
     private var clipboardOn = true
     private var typedThisSession = false
     private var clipboardEpoch = 0
-    private var pendingTranslation: Pair<String, Boolean>? = null
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
+
+    // tarjima (Tor orqali): tugmalar ilovaga emas, tarjima qatoriga yozadi
+    private var trMode = false
+    private val trBuf = StringBuilder()
+    private var trFromClip = false
+    private var trResult: String? = null
+    private var trStatus: String? = null
+    private var trError = false
+    private var trOrbotHint = false
+    private var trBusy = false
+    private var trSeq = 0
+    private val worker = Executors.newSingleThreadExecutor()
+    private val ui = Handler(Looper.getMainLooper())
+
+    // parollar
+    private var fieldKind = FieldKind.OTHER
+    private var fieldPkg = ""
+    private var incognito = false
+    private var filledByVault = false
+    private var unlockInFlight = false
+    private var warnedNoLock = false
+
+    /** Oxirgi tark etilgan qisqa matn maydoni (login bo'lishi mumkin): (ilova, matn, vaqt). Faqat xotirada. */
+    private var lastUser: Triple<String, String, Long>? = null
+
+    /** Joriy kirish maydonidagi oxirgi ko'rilgan matn (faqat xotirada, maydon almashganda tozalanadi). */
+    private var liveText: String? = null
+
+    /** Login to'ldirilgach keyingi parol maydoniga yoziladigan parol: (ilova, parol, vaqt). */
+    private var queuedPass: Triple<String, String, Long>? = null
+    private var genPassword: String? = null
+    private var pendingVault: Pair<String, () -> Unit>? = null
+    private val screenOff = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Vault.lock()
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -68,13 +114,25 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         } catch (t: Throwable) {
             // bufer kuzatilmasa ham klaviatura ishlayveradi
         }
+        try {
+            ContextCompat.registerReceiver(this, screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
+        } catch (t: Throwable) {
+            // ombor baribir vaqt o'tib qulflanadi
+        }
     }
 
     override fun onCreateInputView(): View {
         val r = KeyboardRoot(this, this)
         r.strip.onPick = { onSuggestion(it) }
-        r.strip.onTool = { if (it == 0) toggleClipboardPanel() else startTranslate() }
+        r.strip.onTool = { tool ->
+            when (tool) {
+                0 -> toggleClipboardPanel()
+                1 -> toggleTranslate()
+                else -> toggleVaultPanel()
+            }
+        }
         r.strip.onClip = { pasteLatestClip() }
+        r.strip.onAction = { onStripAction(it) }
         root = r
         applyPrefs()
         applyLayout()
@@ -160,14 +218,21 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         } else {
             captureClipboard()
             r.showClipboard(clipboardStore().sorted(), this)
+            updateSecureFlag()
         }
     }
 
     override fun onClipPaste(text: String) {
-        val ic = currentInputConnection ?: return
         typedThisSession = true
-        ic.commitText(text, 1)
         root?.hideClipboard()
+        if (trMode) {
+            trBuf.append(text)
+            trFromClip = true
+            trChanged()
+            return
+        }
+        val ic = currentInputConnection ?: return
+        ic.commitText(text, 1)
         afterInput()
     }
 
@@ -194,51 +259,524 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         refreshSuggestions()
     }
 
-    // ---------------------------------------------------------------- tarjima
+    // ---------------------------------------------------------------- tarjima (Tor orqali)
 
-    /**
-     * Belgilangan matnni (yoki maydondagi butun matnni) telefondagi tarjima ilovasiga uzatadi.
-     * Natija kelsa, maydonga qaytilganda o'sha matn o'rniga qo'yiladi.
-     */
-    private fun startTranslate() {
-        val ic = currentInputConnection ?: return
-        val selected = ic.getSelectedText(0)?.toString().orEmpty()
-        val whole = if (selected.isEmpty()) {
-            (ic.getTextBeforeCursor(5000, 0) ?: "").toString() + (ic.getTextAfterCursor(5000, 0) ?: "").toString()
-        } else ""
-        val text = selected.ifEmpty { whole }
-        if (text.isBlank()) {
-            Toast.makeText(this, "Tarjima uçun avval matn yozing yoki belgilang", Toast.LENGTH_SHORT).show()
+    private fun toggleTranslate() {
+        if (trMode) closeTranslate() else openTranslate()
+    }
+
+    private fun openTranslate() {
+        val r = root ?: return
+        if (fieldKind.isPassword) {
+            Toast.makeText(this, "Parol maydonida tarjima öçiq", Toast.LENGTH_SHORT).show()
             return
         }
-        val replaceAll = selected.isEmpty()
-        TranslateBridge.request { result -> pendingTranslation = result to replaceAll }
-        try {
-            startActivity(
-                Intent(this, TranslateActivity::class.java)
-                    .putExtra(TranslateActivity.EXTRA_TEXT, text)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+        r.hideEmoji()
+        r.hideClipboard()
+        r.hideVault()
+        trMode = true
+        trBuf.setLength(0)
+        // belgilangan matn bo'lsa — o'shani tarjima qilamiz, natija uning o'rniga qo'yiladi
+        val sel = try {
+            currentInputConnection?.getSelectedText(0)?.toString().orEmpty()
         } catch (t: Throwable) {
-            TranslateBridge.cancel()
-            Toast.makeText(this, "Tarjima oynasi oçilmadi", Toast.LENGTH_SHORT).show()
+            ""
+        }
+        if (sel.isNotBlank()) trBuf.append(sel)
+        trFromClip = false
+        trResult = null
+        trStatus = null
+        trError = false
+        trOrbotHint = false
+        r.showTranslate(this)
+        r.keyboard.enterStyle = EnterStyle.SEND
+        trAutoCap()
+        renderTranslate()
+        refreshSuggestions()
+    }
+
+    private fun closeTranslate() {
+        if (!trMode) return
+        trMode = false
+        trSeq++
+        trBusy = false
+        trBuf.setLength(0)
+        trResult = null
+        trStatus = null
+        root?.hideTranslate()
+        root?.keyboard?.enterStyle = enter
+        updateAutoCap()
+        refreshSuggestions()
+    }
+
+    private fun renderTranslate() {
+        if (!trMode) return
+        val src = if (trFromClip) "Avto" else langs[langIdx].short
+        root?.trBar?.render(
+            TrState(src, Translator.shortName(prefs.trTarget), trBuf.toString(), trBusy, trStatus, trError, trResult),
+        )
+    }
+
+    /** Tarjima qatoridagi matn o'zgardi: eski natija endi mos emas. */
+    private fun trChanged() {
+        trResult = null
+        if (!trBusy) {
+            trStatus = null
+            trError = false
+            trOrbotHint = false
+        }
+        if (shift == Shift.ONCE) setShift(Shift.OFF)
+        trAutoCap()
+        renderTranslate()
+        refreshSuggestions()
+    }
+
+    private fun trAutoCap() {
+        if (page != Page.LETTERS || shift == Shift.CAPS) return
+        val s = trBuf.toString()
+        val want = if (s.isBlank() || Regex("[.!?…]\\s+$").containsMatchIn(s)) Shift.ONCE else Shift.OFF
+        if (shift != want) setShift(want)
+    }
+
+    private fun trDeleteLast() {
+        if (trBuf.isEmpty()) return
+        val n = Character.charCount(trBuf.codePointBefore(trBuf.length))
+        trBuf.setLength(trBuf.length - n)
+    }
+
+    override fun onTrSend() {
+        if (trBusy) return
+        val text = trBuf.toString().trim()
+        if (text.isEmpty()) return
+        val engine = prefs.trEngine
+        val key = Secrets.get(this, Translator.keyName(engine))
+        if (key.isNullOrBlank()) {
+            trStatus = "Avval Söz+ sozlamalarida tarjima kalitini kiriting (bosing)"
+            trError = true
+            trOrbotHint = false
+            renderTranslate()
+            return
+        }
+        val region = prefs.azureRegion
+        val target = prefs.trTarget
+        val (source, payload) = Translator.prepareSource(text, langs[langIdx], trFromClip)
+        trBusy = true
+        trError = false
+        trOrbotHint = false
+        trResult = null
+        trStatus = "Tor orqali tarjima qilinmoqda…"
+        val seq = ++trSeq
+        renderTranslate()
+        val app = applicationContext
+        worker.execute {
+            var result: String? = null
+            var error: String? = null
+            var orbot = false
+            try {
+                if (!TorNet.isUp()) {
+                    orbot = true
+                    if (!TorNet.isOrbotInstalled(app)) {
+                        throw Translator.Failure("Tor uçun Orbot ilovasi kerak — Söz+ sozlamalaridan örnating")
+                    }
+                    TorNet.requestStart(app)
+                    ui.post {
+                        if (seq == trSeq) {
+                            trStatus = "Orbot (Tor) işga tuşirilmoqda…"
+                            renderTranslate()
+                        }
+                    }
+                    var up = false
+                    for (i in 0 until 30) {
+                        Thread.sleep(1000)
+                        if (seq != trSeq) return@execute
+                        if (TorNet.isUp()) {
+                            up = true
+                            break
+                        }
+                    }
+                    if (!up) throw Translator.Failure("Orbot ulanmadi: Orbot'ni oçib «Start» bosing (bosing — oçiladi)")
+                    orbot = false
+                    ui.post {
+                        if (seq == trSeq) {
+                            trStatus = "Tor orqali tarjima qilinmoqda…"
+                            renderTranslate()
+                        }
+                    }
+                }
+                result = Translator.finish(Translator.translate(engine, key, region, payload, source, target), target)
+            } catch (e: Translator.Failure) {
+                error = e.userMessage
+            } catch (e: InterruptedException) {
+                return@execute
+            } catch (e: Exception) {
+                error = "Tarjima bölmadi"
+            }
+            val res = result
+            val err = error
+            val orbotErr = orbot
+            ui.post {
+                if (seq != trSeq) return@post
+                trBusy = false
+                if (res != null) {
+                    trResult = res
+                    trStatus = null
+                    trError = false
+                } else {
+                    trStatus = err
+                    trError = true
+                    trOrbotHint = orbotErr
+                }
+                renderTranslate()
+            }
         }
     }
 
-    private fun applyPendingTranslation() {
-        val (text, all) = pendingTranslation ?: return
+    override fun onTrClose() {
+        closeTranslate()
+    }
+
+    override fun onTrTarget(code: String) {
+        prefs.trTarget = code
+        trResult = null
+        renderTranslate()
+    }
+
+    /** Tillarni almashtiradi: maqsad tili klaviaturada bo'lsa, klaviatura shu tilga o'tadi. */
+    override fun onTrSwap() {
+        val tgt = Lang.byId(prefs.trTarget)
+        val i = if (tgt == null) -1 else langs.indexOf(tgt)
+        if (i < 0) {
+            trStatus = "Bu til klaviaturada yöq: faqat maqsad tilini tanlang"
+            trError = false
+            renderTranslate()
+            return
+        }
+        prefs.trTarget = langs[langIdx].id
+        trResult?.let {
+            trBuf.setLength(0)
+            trBuf.append(it)
+        }
+        trResult = null
+        trFromClip = false
+        setLanguage(i)
+    }
+
+    override fun onTrPasteClip() {
+        val text = clipboardStore().latest()?.text
+        if (text.isNullOrBlank()) {
+            trStatus = "Buferda matn yöq"
+            trError = false
+            renderTranslate()
+            return
+        }
+        trBuf.setLength(0)
+        trBuf.append(text.take(Translator.MAX_CHARS))
+        trFromClip = true
+        trChanged()
+    }
+
+    override fun onTrInsert() {
+        val res = trResult ?: return
         val ic = currentInputConnection ?: return
-        pendingTranslation = null
+        typedThisSession = true
+        // belgilangan matndan boshlangan bo'lsa, commitText uning o'rniga qo'yadi
+        ic.commitText(res, 1)
+        trBuf.setLength(0)
+        trResult = null
+        trFromClip = false
+        trStatus = "✓ Qöyildi"
+        trError = false
+        trAutoCap()
+        renderTranslate()
+        refreshSuggestions()
+    }
+
+    override fun onTrCopy() {
+        val res = trResult ?: return
+        try {
+            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Tarjima", res))
+            trStatus = "✓ Nusxalandi"
+            trError = false
+        } catch (t: Throwable) {
+            trStatus = "Nusxalab bölmadi"
+            trError = true
+        }
+        renderTranslate()
+    }
+
+    override fun onTrStatusTap() {
+        if (trOrbotHint) {
+            if (!TorNet.openOrbot(this)) TorNet.openOrbotStore(this)
+        } else if (trError && trStatus?.contains("kalit") == true) {
+            try {
+                startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (t: Throwable) {
+                // sozlamalar ochilmadi
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- parollar
+
+    private fun appLabel(pkg: String): String = try {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+    } catch (t: Throwable) {
+        pkg
+    }
+
+    private fun fieldText(ic: InputConnection): String? = try {
+        ic.getExtractedText(ExtractedTextRequest(), 0)?.text?.toString()
+            ?: run {
+                val b = ic.getTextBeforeCursor(1000, 0)
+                val a = ic.getTextAfterCursor(1000, 0)
+                if (b == null && a == null) null else "${b ?: ""}${a ?: ""}"
+            }
+    } catch (t: Throwable) {
+        null
+    }
+
+    /** Maydondagi butun matnni [text] bilan almashtiradi. */
+    private fun replaceField(ic: InputConnection, text: String) {
+        val len = fieldText(ic)?.length ?: 0
         ic.beginBatchEdit()
-        if (all) ic.performContextMenuAction(android.R.id.selectAll)
+        ic.finishComposingText()
+        if (len > 0) ic.setSelection(0, len)
         ic.commitText(text, 1)
         ic.endBatchEdit()
     }
 
+    /**
+     * Kirish maydonidagi matnni xotirada kuzatib boradi: maydondan chiqilganda ulanish allaqachon
+     * yopilgan bo'lishi mumkin, shuning uchun oxirgi ko'rilgan holat ishlatiladi.
+     */
+    private fun trackField() {
+        if (fieldKind == FieldKind.OTHER || fieldPkg.isEmpty() || fieldPkg == packageName) return
+        val ic = currentInputConnection ?: return
+        fieldText(ic)?.let { liveText = it }
+    }
+
+    /** Maydondan chiqilganda: login bo'lsa eslab turadi, parol bo'lsa (login bilan birga) shifrlab saqlaydi. */
+    private fun captureCredential() {
+        if (fieldKind == FieldKind.OTHER || fieldPkg.isEmpty() || fieldPkg == packageName) return
+        if (incognito || unlockInFlight || !prefs.vaultAutoSave) return
+        val fresh = currentInputConnection?.let { fieldText(it) }
+        val text = fresh?.takeIf { it.isNotEmpty() } ?: liveText ?: return
+        val now = System.currentTimeMillis()
+        when (fieldKind) {
+            FieldKind.USER, FieldKind.SHORT_TEXT -> {
+                val t = text.trim()
+                if (t.isNotEmpty() && t.length <= 100 && '\n' !in t) lastUser = Triple(fieldPkg, t, now)
+            }
+            FieldKind.PASSWORD, FieldKind.NEW_PASSWORD -> {
+                if (filledByVault || text.length < 4 || text.length > 200) return
+                val user = lastUser?.takeIf { it.first == fieldPkg && now - it.third < 10 * 60_000L }?.second ?: ""
+                rememberCredential(user, text)
+            }
+            else -> {}
+        }
+    }
+
+    private fun rememberCredential(user: String, pass: String) {
+        try {
+            if (Vault.isSaved(this, fieldPkg, user, pass)) return
+            Vault.remember(this, Cred(Vault.newId(), fieldPkg, appLabel(fieldPkg), user, pass, System.currentTimeMillis()))
+            Toast.makeText(this, "Söz+ parolni şifrlab eslab qoldi", Toast.LENGTH_SHORT).show()
+        } catch (e: VaultCrypto.NoScreenLock) {
+            if (!warnedNoLock) {
+                warnedNoLock = true
+                Toast.makeText(this, "Parolni saqlaş uçun telefonda ekran qulfi (PIN) kerak", Toast.LENGTH_LONG).show()
+            }
+        } catch (t: Throwable) {
+            // saqlanmadi — yozishga xalaqit bermaydi
+        }
+    }
+
+    /** Ombor ochiq bo'lsa [action]; bo'lmasa telefon qulfini so'raydi va klaviatura qayta ochilganda bajaradi. */
+    private fun withVault(action: () -> Unit) {
+        when (Vault.tryOpen(this)) {
+            Vault.Open.OPEN -> action()
+            Vault.Open.NEED_AUTH -> {
+                pendingVault = fieldPkg to action
+                unlockInFlight = true
+                VaultBridge.requestUnlock(this) { ok -> onUnlockResult(ok) }
+            }
+            Vault.Open.NO_LOCK -> Toast.makeText(this, "Parollar uçun avval telefonda ekran qulfini (PIN yoki grafik kalit) qöying", Toast.LENGTH_LONG).show()
+            Vault.Open.BROKEN -> Toast.makeText(this, "Parollar kaliti bekor bölgan (ekran qulfi öçirilganmi?). Sozlamalardan zaxiradan tiklang.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Qulf ochildi: ombor ochiladi, kutilgan amal klaviatura qayta ko'ringanda bajariladi. */
+    private fun onUnlockResult(ok: Boolean) {
+        if (ok) {
+            Vault.tryOpen(applicationContext)
+        } else {
+            pendingVault = null
+        }
+    }
+
+    private fun vaultState(note: String? = null): VaultState {
+        val g = genPassword ?: PasswordGen.generate().also { genPassword = it }
+        val all = Vault.all()
+        return VaultState(Vault.isOpen, all.filter { it.app == fieldPkg }, all.filter { it.app != fieldPkg }, g, note)
+    }
+
+    private fun showVaultPanel() {
+        val r = root ?: return
+        closeTranslate()
+        r.showVault(vaultState(), this)
+        updateSecureFlag()
+    }
+
+    private fun toggleVaultPanel() {
+        val r = root ?: return
+        if (r.isVaultShown) {
+            r.hideVault()
+            updateSecureFlag()
+            return
+        }
+        // telefon yaqinda ochilgan bo'lsa, so'roqsiz ochiladi; aks holda panel "Oçiş" tugmasi bilan chiqadi
+        val note = when (Vault.tryOpen(this)) {
+            Vault.Open.NO_LOCK -> "Parollarni saqlaş uçun telefonda ekran qulfi (PIN yoki grafik kalit) kerak."
+            Vault.Open.BROKEN -> "Ombor kaliti bekor bölgan: Söz+ sozlamalaridan zaxira nusxadan tiklang."
+            else -> null
+        }
+        closeTranslate()
+        r.showVault(vaultState(note), this)
+        updateSecureFlag()
+    }
+
+    private fun refreshVaultPanel() {
+        root?.updateVault(vaultState())
+    }
+
+    override fun onVaultFill(c: Cred) {
+        fillCred(c)
+    }
+
+    private fun fillCred(c: Cred) {
+        val ic = currentInputConnection ?: return
+        root?.hideVault()
+        updateSecureFlag()
+        typedThisSession = true
+        if (fieldKind.isPassword) {
+            replaceField(ic, c.pass)
+            filledByVault = true
+        } else {
+            if (c.user.isNotEmpty()) replaceField(ic, c.user)
+            if (c.pass.isNotEmpty()) queuedPass = Triple(fieldPkg, c.pass, System.currentTimeMillis())
+            val action = (currentInputEditorInfo?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
+            if (action == EditorInfo.IME_ACTION_NEXT) ic.performEditorAction(action)
+        }
+        updateAutoCap()
+        refreshSuggestions()
+    }
+
+    override fun onVaultDelete(c: Cred) {
+        try {
+            Vault.delete(this, c.id)
+        } catch (t: Throwable) {
+            // o'chmadi
+        }
+        refreshVaultPanel()
+        refreshSuggestions()
+    }
+
+    override fun onVaultUseGenerated(password: String) {
+        val ic = currentInputConnection ?: return
+        root?.hideVault()
+        updateSecureFlag()
+        typedThisSession = true
+        if (fieldKind.isPassword) replaceField(ic, password) else ic.commitText(password, 1)
+        refreshSuggestions()
+    }
+
+    override fun onVaultRegenerate() {
+        genPassword = PasswordGen.generate()
+        refreshVaultPanel()
+        refreshSuggestions()
+    }
+
+    override fun onVaultUnlock() {
+        withVault { showVaultPanel() }
+    }
+
+    override fun onVaultLock() {
+        Vault.lock()
+        refreshVaultPanel()
+        refreshSuggestions()
+    }
+
+    /** Kirish maydonlarida qatordagi tugmalar: saqlangan parol va (ba'zan) kuchli parol taklifi. */
+    private fun credentialActions(ic: InputConnection?): List<StripAction> {
+        if (!fieldKind.isLogin || fieldPkg.isEmpty() || fieldPkg == packageName) return emptyList()
+        val list = ArrayList<StripAction>(2)
+        if (Vault.isOpen) {
+            val mine = Vault.forApp(fieldPkg)
+            if (mine.size == 1) {
+                list.add(StripAction(ACT_FILL, StripAction.ICON_KEY, mine[0].user.ifEmpty { "Saqlangan parol" }))
+            } else if (mine.size > 1) {
+                list.add(StripAction(ACT_OPEN, StripAction.ICON_KEY, "${mine.size} ta saqlangan kiriş"))
+            }
+        } else if (Vault.hasEntriesFor(this, fieldPkg)) {
+            list.add(StripAction(ACT_OPEN, StripAction.ICON_KEY, "Saqlangan parol"))
+        }
+        if (fieldKind.isPassword && prefs.vaultSuggest) {
+            val typed = liveText ?: (if (ic != null) fieldText(ic).orEmpty() else "")
+            val g = genPassword
+            val weak = typed.length >= 4 && typed != g && PasswordGen.strength(typed) <= 2
+            if ((fieldKind == FieldKind.NEW_PASSWORD && typed.isEmpty()) || weak) {
+                val p = g ?: PasswordGen.generate().also { genPassword = it }
+                list.add(StripAction(ACT_GEN, StripAction.ICON_DICE, if (weak) "Kuçliroq: $p" else p, accent = true))
+            }
+        }
+        return list
+    }
+
+    private fun onStripAction(id: Int) {
+        when (id) {
+            ACT_FILL -> withVault {
+                val mine = Vault.forApp(fieldPkg)
+                if (mine.size == 1) fillCred(mine[0]) else showVaultPanel()
+            }
+            ACT_OPEN -> withVault {
+                val mine = Vault.forApp(fieldPkg)
+                if (mine.size == 1) fillCred(mine[0]) else showVaultPanel()
+            }
+            ACT_GEN -> genPassword?.let { onVaultUseGenerated(it) }
+        }
+    }
+
+    /** Parol maydonida va parollar panelida klaviatura oynasini ekran rasmi/yozuvidan yashiradi. */
+    private fun updateSecureFlag() {
+        val w = window?.window ?: return
+        val secure = fieldKind.isPassword || root?.isVaultShown == true
+        try {
+            if (secure) w.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else w.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } catch (t: Throwable) {
+            // ba'zi tizimlarda IME oynasiga ruxsat yo'q
+        }
+    }
+
+    // ---------------------------------------------------------------- kirish
+
     override fun onEvaluateFullscreenMode(): Boolean = false
+
+    override fun onStartInput(attribute: EditorInfo, restarting: Boolean) {
+        super.onStartInput(attribute, restarting)
+        val pkg = attribute.packageName ?: ""
+        if (pkg != fieldPkg) genPassword = null
+        fieldPkg = pkg
+        fieldKind = if (attribute.inputType == InputType.TYPE_NULL) FieldKind.OTHER else FieldKind.of(attribute)
+        incognito = attribute.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        if (!restarting) {
+            filledByVault = false
+            liveText = null
+        }
+    }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        unlockInFlight = false
         loadLangs()
         if (prefs.personalEpoch != knownEpoch) {
             knownEpoch = prefs.personalEpoch
@@ -255,14 +793,39 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         if (!restarting) typedThisSession = false
         clipboardOn = prefs.clipboardHistory && !isSensitiveField(info)
         configurePrediction(info)
+        if (fieldKind.isPassword) closeTranslate()
         root?.hideEmoji()
         root?.hideClipboard()
+        root?.hideVault()
         applyPrefs()
         applyLayout()
-        applyPendingTranslation()
+        if (trMode) root?.keyboard?.enterStyle = EnterStyle.SEND
         captureClipboard()
-        updateAutoCap()
+        fillQueuedPassword()
+        runPendingVault()
+        trackField()
+        updateSecureFlag()
+        if (trMode) trAutoCap() else updateAutoCap()
         refreshSuggestions()
+    }
+
+    /** Login to'ldirilib "Keyingi" bosilgan bo'lsa, parol maydoniga parolni yozadi. */
+    private fun fillQueuedPassword() {
+        val (pkg, pass, time) = queuedPass ?: return
+        if (!fieldKind.isPassword) return
+        queuedPass = null
+        if (pkg != fieldPkg || System.currentTimeMillis() - time > 20_000L) return
+        val ic = currentInputConnection ?: return
+        if (!fieldText(ic).isNullOrEmpty()) return
+        ic.commitText(pass, 1)
+        filledByVault = true
+    }
+
+    private fun runPendingVault() {
+        val (pkg, action) = pendingVault ?: return
+        if (!Vault.isOpen) return
+        pendingVault = null
+        if (pkg == fieldPkg) action()
     }
 
     /** Parol maydonlarida bufer taklif qilinmaydi. */
@@ -276,24 +839,35 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     }
 
     override fun onFinishInput() {
+        captureCredential()
         savePersonal()
         super.onFinishInput()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        closeTranslate()
         root?.hideEmoji()
         root?.hideClipboard()
+        root?.hideVault()
         super.onFinishInputView(finishingInput)
     }
 
     override fun onDestroy() {
         savePersonal()
         saveClipboard()
+        trSeq++
+        worker.shutdownNow()
         try {
             (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).removePrimaryClipChangedListener(clipListener)
         } catch (t: Throwable) {
             // e'tiborsiz
         }
+        try {
+            unregisterReceiver(screenOff)
+        } catch (t: Throwable) {
+            // ro'yxatda yo'q
+        }
+        Vault.lock()
         super.onDestroy()
     }
 
@@ -311,7 +885,8 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        refreshSuggestions()
+        trackField()
+        if (!trMode) refreshSuggestions()
     }
 
     // ---------------------------------------------------------------- sozlamalar
@@ -343,7 +918,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         k.langName = lang.label
         k.langShorts = langs.map { it.short }
         k.shift = shift
-        k.enterStyle = enter
+        k.enterStyle = if (trMode) EnterStyle.SEND else enter
         k.setLayout(
             if (page == Page.LETTERS) Layouts.letters(lang, prefs.numberRow, prefs.uzLayout) else Layouts.symbols(page),
         )
@@ -371,6 +946,10 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     }
 
     private fun updateAutoCap() {
+        if (trMode) {
+            trAutoCap()
+            return
+        }
         if (page != Page.LETTERS || shift == Shift.CAPS) return
         val info = currentInputEditorInfo ?: return
         val ic = currentInputConnection ?: return
@@ -440,18 +1019,36 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
 
     private fun refreshSuggestions() {
         val strip = root?.strip ?: return
-        val before = try {
-            currentInputConnection?.getTextBeforeCursor(80, 0)
+        val ic = currentInputConnection
+        // kirish maydonlarida: saqlangan parol va kuchli parol taklifi (takliflar o'rnida)
+        val acts = if (trMode) emptyList() else try {
+            credentialActions(ic)
         } catch (t: Throwable) {
-            null
+            emptyList()
+        }
+        strip.actions = acts
+        if (acts.isNotEmpty()) {
+            strip.clipText = null
+            clearStrip(strip)
+            return
+        }
+        val before: CharSequence? = if (trMode) {
+            trBuf.toString().takeLast(80)
+        } else {
+            try {
+                ic?.getTextBeforeCursor(80, 0)
+            } catch (t: Throwable) {
+                null
+            }
         }
         // yozish boshlanmagan bo'lsa: oxirgi nusxa (takliflar o'rnida)
-        strip.clipText = try {
+        strip.clipText = if (trMode) null else try {
             clipSuggestion(before)
         } catch (t: Throwable) {
             null
         }
-        if (!predictOn || page != Page.LETTERS) {
+        val predicting = if (trMode) prefs.predict else predictOn
+        if (!predicting || page != Page.LETTERS) {
             clearStrip(strip)
             return
         }
@@ -464,7 +1061,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
             val style = Suggester.capStyle(ctx.prefix, shift)
             val sug = suggesterFor(langs[langIdx])
             val words = sug.suggest(ctx, style, 3, fuzzyOn)
-            val auto = if (autoCorrectOn && ctx.prefix.length >= 2 && ctx.prefix != suppressAutoFor) {
+            val auto = if (!trMode && autoCorrectOn && ctx.prefix.length >= 2 && ctx.prefix != suppressAutoFor) {
                 sug.autoCorrect(ctx, fuzzyOn)?.let { Suggester.caseLike(it, ctx.prefix) }
             } else null
             if (auto != null && auto != ctx.prefix) {
@@ -528,6 +1125,13 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
 
     private fun onSuggestion(index: Int) {
         val word = stripCommit.getOrNull(index) ?: return
+        if (trMode) {
+            val ctx = ContextParser.parse(trBuf.toString().takeLast(80))
+            trBuf.setLength(trBuf.length - ctx.prefix.length)
+            trBuf.append(word).append(' ')
+            trChanged()
+            return
+        }
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
@@ -583,6 +1187,11 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     // ---------------------------------------------------------------- KeyboardListener
 
     override fun onText(text: String) {
+        if (trMode) {
+            if (trBuf.length + text.length <= Translator.MAX_CHARS) trBuf.append(text)
+            trChanged()
+            return
+        }
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
@@ -599,6 +1208,11 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     }
 
     override fun onSpace() {
+        if (trMode) {
+            trBuf.append(' ')
+            trChanged()
+            return
+        }
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
@@ -611,6 +1225,11 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     }
 
     override fun onDelete() {
+        if (trMode) {
+            trDeleteLast()
+            trChanged()
+            return
+        }
         val ic = currentInputConnection ?: return
         typedThisSession = true
         justAccepted = false
@@ -627,6 +1246,10 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     }
 
     override fun onEnter() {
+        if (trMode) {
+            if (trResult != null && trBuf.isNotEmpty()) onTrInsert() else onTrSend()
+            return
+        }
         val info = currentInputEditorInfo ?: return
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
@@ -693,6 +1316,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         if (page != Page.LETTERS) page = Page.LETTERS
         applyLayout()
         updateAutoCap()
+        renderTranslate()
         refreshSuggestions()
     }
 
@@ -705,5 +1329,9 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
 
         /** Shu vaqt ichida nusxalangan matn yozish boshida taklif qilinadi. */
         const val CLIP_FRESH_MS = 15 * 60 * 1000L
+
+        const val ACT_FILL = 1
+        const val ACT_OPEN = 2
+        const val ACT_GEN = 3
     }
 }

@@ -1,6 +1,7 @@
 package uz.alifbo.klaviatura
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
@@ -40,6 +41,18 @@ class SettingsActivity : Activity() {
     private val layoutButtons = ArrayList<TextView>()
     private var previewLang: Lang = Lang.UZ
 
+    // tarjima va parollar
+    private lateinit var orbotStatus: TextView
+    private lateinit var orbotButton: TextView
+    private lateinit var keyStatus: TextView
+    private lateinit var keyHelp: TextView
+    private lateinit var keyInput: EditText
+    private lateinit var regionInput: EditText
+    private lateinit var testResult: TextView
+    private lateinit var vaultStatus: TextView
+    private val engineButtons = ArrayList<TextView>()
+    private var pendingExport: ByteArray? = null
+
     private var pageBg = 0
     private var cardBg = 0
     private var ink = 0
@@ -75,7 +88,7 @@ class SettingsActivity : Activity() {
         header.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }, LinearLayout.LayoutParams(dpi(56), dpi(56)))
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label(getString(R.string.app_name), 28f, ink, bold = true))
-        titles.addView(label("Yangi özbek alifbosi uçun aqlli klaviatura", 14f, muted))
+        titles.addView(label("Aqlli klaviatura: tarjimon va parollar bilan", 14f, muted))
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
             marginStart = dpi(14)
         })
@@ -90,12 +103,13 @@ class SettingsActivity : Activity() {
         buildPredictCard()
         buildClipboardCard()
         buildTranslateCard()
+        buildVaultCard()
         buildLangCard()
         buildSourcesCard()
 
         val foot = label(
-            "Ilova heç qanday ruxsat söramaydi va internetga ulana olmaydi. " +
-                "Yozganlaringiz faqat telefoningizda qoladi.",
+            "Söz+ internetga faqat tarjima uçun, faqat siz ➤ bosganda va faqat Tor orqali çiqadi. " +
+                "Yozganlaringiz, örganilgan sözlar, bufer va parollar faqat telefoningizda qoladi.",
             12f, muted,
         )
         content.addView(foot, lp().apply { topMargin = dpi(20) })
@@ -106,6 +120,8 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshSetupStatus()
+        refreshTranslateCard()
+        refreshVaultCard()
     }
 
     // ---------------------------------------------------------------- bo'limlar
@@ -327,24 +343,365 @@ class SettingsActivity : Activity() {
         Toast.makeText(this, "Bufer tarixi öçirildi", Toast.LENGTH_SHORT).show()
     }
 
+    // ---------------------------------------------------------------- tarjima (Tor orqali)
+
     private fun buildTranslateCard() {
-        val c = card("Tarjima")
+        val c = card("Tarjima (Tor orqali)")
         c.addView(
             label(
-                "Tahmin qatoridagi «A文» tugmasi belgilangan matnni (yoki maydondagi butun matnni) telefoningizdagi " +
-                    "Google Tarjimon ilovasiga uzatadi va tarjimani örniga qö'yadi. Klaviaturaning özi internetga " +
-                    "ulanmaydi: matn faqat siz tugmani bosganingizda Google Tarjimonga ketadi. Tarjima avtomatik " +
-                    "qaytmasa, uni nusxalang — bufer uni ilib oladi va qatorda taklif qiladi.",
+                "Tahmin qatoridagi «A文» tugmasi klaviatura içida tarjima qatorini oçadi: yozasiz, ➤ bosasiz, " +
+                    "tarjimani körib «Qöyiş» bilan maydonga qöyasiz. 📋 — buferdagi matnni (masalan, kelgan xabarni) " +
+                    "tarjima qiliş. Matn faqat siz ➤ bosganingizda va faqat Tor tarmoği orqali ketadi: xizmat IP " +
+                    "manzilingizni körmaydi, har tarjima alohida Tor zanjiridan ketadi. Tor işlamasa, matn heç " +
+                    "qayerga yuborilmaydi. Parol maydonlarida tarjima öçiq; parollar ombori tarmoqqa heç qaçon çiqmaydi.",
                 12f, muted,
             ),
         )
-        val installed = TranslateBridge.isGoogleTranslateInstalled(packageManager)
+
+        c.addView(label("1. Tor (Orbot ilovasi)", 15f, ink), lp().apply { topMargin = dpi(14) })
+        orbotStatus = label("", 13f, muted)
+        c.addView(orbotStatus)
+        orbotButton = pill("") {
+            if (TorNet.isOrbotInstalled(this)) TorNet.openOrbot(this) else TorNet.openOrbotStore(this)
+        }
+        c.addView(orbotButton, lp().apply { topMargin = dpi(8) })
+
+        c.addView(label("2. Tarjima xizmati va kalit", 15f, ink), lp().apply { topMargin = dpi(16) })
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val names = listOf("Google Cloud", "Azure")
+        names.forEachIndexed { i, name ->
+            val b = chip(name) {
+                prefs.trEngine = i
+                refreshTranslateCard()
+            }
+            engineButtons.add(b)
+            row.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (i < names.size - 1) marginEnd = dpi(6)
+            })
+        }
+        c.addView(row, lp().apply { topMargin = dpi(6) })
+        keyStatus = label("", 13f, muted)
+        c.addView(keyStatus, lp().apply { topMargin = dpi(8) })
+        keyInput = EditText(this).apply {
+            hint = "API kaliti"
+            setHintTextColor(muted)
+            setTextColor(ink)
+            textSize = 15f
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or
+                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        c.addView(keyInput)
+        regionInput = EditText(this).apply {
+            hint = "Azure mintaqasi (masalan: westeurope)"
+            setHintTextColor(muted)
+            setTextColor(ink)
+            textSize = 15f
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setText(prefs.azureRegion)
+        }
+        c.addView(regionInput)
+        c.addView(pill("Kalitni saqlaş") { saveTranslateKey() }, lp().apply { topMargin = dpi(8) })
+        keyHelp = label("", 12f, muted)
+        c.addView(keyHelp, lp().apply { topMargin = dpi(8) })
+
+        c.addView(label("3. Sinab köriş", 15f, ink), lp().apply { topMargin = dpi(16) })
+        c.addView(pill("«Salom, dunyo!» ni tarjima qiliş") { testTranslate() }, lp().apply { topMargin = dpi(8) })
+        testResult = label("", 13f, muted)
+        c.addView(testResult, lp().apply { topMargin = dpi(6) })
+        refreshTranslateCard()
+    }
+
+    private fun refreshTranslateCard() {
+        if (!::orbotStatus.isInitialized) return
+        val orbot = TorNet.isOrbotInstalled(this)
+        orbotStatus.text = if (orbot) {
+            "✓ Orbot örnatilgan. Tarjimadan oldin Orbot'da Tor yoqilgan bölişi kerak (Söz+ özi ham söraydi)."
+        } else {
+            "Orbot örnatilmagan: Tor'siz tarjima umuman işlamaydi."
+        }
+        orbotButton.text = if (orbot) "Orbot'ni oçiş" else "Orbot'ni örnatiş (Play Market)"
+        val engine = prefs.trEngine
+        engineButtons.forEachIndexed { i, b -> styleChip(b, i == engine) }
+        regionInput.visibility = if (engine == Translator.AZURE) View.VISIBLE else View.GONE
+        val has = Secrets.has(this, Translator.keyName(engine))
+        keyStatus.text = if (has) "✓ Kalit saqlangan (şifrlangan). Yangisini kiritsangiz, almaşadi." else "Kalit hali kiritilmagan"
+        keyStatus.setTextColor(if (has) accent else muted)
+        keyHelp.text = if (engine == Translator.AZURE) {
+            "Azure Translator: portal.azure.com → «Translator» resursi (F0 — oyiga 2 mln belgigaça bepul) → " +
+                "«Keys and Endpoint» bölimidagi KEY 1 va Location/Region. Hisob oçişda karta söraladi."
+        } else {
+            "Google Cloud: console.cloud.google.com → «Cloud Translation API» ni yoqing → «Credentials» → " +
+                "«Create API key». Oyiga 500 ming belgigaça bepul, hisobda karta (billing) bölişi kerak. " +
+                "Xavfsizlik uçun kalitni faqat «Cloud Translation API» bilan çeklang."
+        }
+    }
+
+    private fun saveTranslateKey() {
+        val engine = prefs.trEngine
+        val key = keyInput.text.toString().trim()
+        if (engine == Translator.AZURE) prefs.azureRegion = regionInput.text.toString().trim()
+        if (key.isEmpty()) {
+            Toast.makeText(this, if (engine == Translator.AZURE) "Mintaqa saqlandi" else "Kalit bös", Toast.LENGTH_SHORT).show()
+            refreshTranslateCard()
+            return
+        }
+        if (!Secrets.put(this, Translator.keyName(engine), key)) {
+            Toast.makeText(this, "Kalit saqlanmadi", Toast.LENGTH_SHORT).show()
+            return
+        }
+        keyInput.setText("")
+        // kalit nusxalab qo'yilgan bo'lsa — bufer tarixidan ham o'chiramiz
+        forgetClip(key)
+        Toast.makeText(this, "Kalit şifrlab saqlandi", Toast.LENGTH_SHORT).show()
+        refreshTranslateCard()
+    }
+
+    private fun forgetClip(text: String) {
+        try {
+            val f = File(filesDir, "clipboard.txt")
+            if (!f.exists()) return
+            val store = ClipboardStore.parse(f.readText())
+            val before = store.size
+            store.remove(text)
+            if (store.size != before) {
+                f.writeText(store.serialize())
+                prefs.clipboardEpoch = prefs.clipboardEpoch + 1
+            }
+        } catch (t: Throwable) {
+            // bufer fayli o'qilmadi
+        }
+    }
+
+    private fun testTranslate() {
+        val engine = prefs.trEngine
+        val key = Secrets.get(this, Translator.keyName(engine))
+        if (key.isNullOrBlank()) {
+            testResult.text = "Avval kalitni kiriting va saqlang"
+            return
+        }
+        val region = prefs.azureRegion
+        testResult.text = "Tor orqali yuborilmoqda…"
+        val app = applicationContext
+        Thread {
+            val msg = try {
+                if (!TorNet.isUp()) {
+                    TorNet.requestStart(app)
+                    var up = false
+                    for (i in 0 until 20) {
+                        Thread.sleep(1000)
+                        if (TorNet.isUp()) {
+                            up = true
+                            break
+                        }
+                    }
+                    if (!up) throw Translator.Failure("Orbot (Tor) işlamayapti: Orbot'ni oçib «Start» bosing")
+                }
+                val src = UzScript.newToOld("Salom, dunyo! Bugun havo juda yaxşi.")
+                "✓ " + Translator.translate(engine, key, region, src, "uz", "en")
+            } catch (e: Translator.Failure) {
+                "✗ " + e.userMessage
+            } catch (e: Exception) {
+                "✗ Tarjima bölmadi"
+            }
+            runOnUiThread { if (!isFinishing) testResult.text = msg }
+        }.apply { isDaemon = true }.start()
+    }
+
+    // ---------------------------------------------------------------- parollar
+
+    private fun buildVaultCard() {
+        val c = card("Parollar")
+        vaultStatus = label("", 13f, muted)
+        c.addView(vaultStatus)
+        switchRow(c, "Parollarni eslab qoliş", prefs.vaultAutoSave) { prefs.vaultAutoSave = it }
+        switchRow(c, "Kuçli parol taklifi", prefs.vaultSuggest) { prefs.vaultSuggest = it }
         c.addView(
-            label(if (installed) "✓ Google Tarjimon örnatilgan" else "Google Tarjimon örnatilmagan", 13f, if (installed) accent else muted),
-            lp().apply { topMargin = dpi(8) },
+            label(
+                "Biror ilovaga kirganingizda Söz+ login (email, telefon raqami yoki foydalanuvçi nomi) va parolni " +
+                    "şifrlab eslab qoladi. Keyingi safar parol maydonida qatorda 🔑 çiqadi — bosilsa, telefon " +
+                    "qulfi (barmoq izi yoki PIN) bilan tasdiqlab töldirasiz. Zaif parol yozsangiz yoki yangi parol " +
+                    "maydonida, qatorda kuçli parol taklif qilinadi. Parollar telefonning himoyalangan qismidagi " +
+                    "kalit bilan şifrlanadi va heç qaçon internetga çiqmaydi.",
+                12f, muted,
+            ),
+            lp().apply { topMargin = dpi(6) },
         )
-        if (!installed) {
-            c.addView(pill("Google Tarjimonni örnatiş") { TranslateBridge.openStore(this) }, lp().apply { topMargin = dpi(8) })
+        c.addView(
+            label(
+                "Diqqat: telefonda ekran qulfini butunlay öçirsangiz, Android ombor kalitini ham öçiradi. " +
+                    "Şuning uçun vaqti-vaqti bilan zaxira nusxa oling (bosh parol bilan şifrlanadi).",
+                12f, muted,
+            ),
+            lp().apply { topMargin = dpi(6) },
+        )
+        c.addView(pill("Zaxira nusxa oliş") { exportVault() }, lp().apply { topMargin = dpi(10) })
+        c.addView(pill("Zaxiradan tiklaş") { importVault() }, lp().apply { topMargin = dpi(8) })
+        c.addView(pill("Hamma parollarni öçiriş") { wipeVault() }, lp().apply { topMargin = dpi(8) })
+        refreshVaultCard()
+    }
+
+    private fun refreshVaultCard() {
+        if (!::vaultStatus.isInitialized) return
+        vaultStatus.text = if (!VaultCrypto.isDeviceSecure(this)) {
+            "⚠ Telefonda ekran qulfi yöq: parollarni saqlaş uçun avval PIN yoki grafik kalit qöying."
+        } else {
+            "${Vault.count(this)} ta kiriş saqlangan (şifrlangan)"
+        }
+    }
+
+    /** Ombor ochiq bo'lsa [action]; bo'lmasa telefon qulfini so'raydi. */
+    private fun withOpenVault(action: () -> Unit) {
+        when (Vault.tryOpen(this)) {
+            Vault.Open.OPEN -> action()
+            Vault.Open.NEED_AUTH -> VaultBridge.requestUnlock(this) { ok ->
+                if (ok && Vault.tryOpen(this) == Vault.Open.OPEN) action()
+            }
+            Vault.Open.NO_LOCK -> Toast.makeText(this, "Avval telefonda ekran qulfini qöying", Toast.LENGTH_LONG).show()
+            Vault.Open.BROKEN -> Toast.makeText(this, "Ombor kaliti bekor bölgan: zaxiradan tiklang", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun askPassphrase(confirm: Boolean, onOk: (CharArray) -> Unit) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpi(20), dpi(8), dpi(20), 0)
+        }
+        fun field(h: String) = EditText(this).apply {
+            hint = h
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val p1 = field("Bosh parol (kamida 8 belgi)")
+        val p2 = field("Bosh parolni takrorlang")
+        box.addView(p1)
+        if (confirm) box.addView(p2)
+        AlertDialog.Builder(this)
+            .setTitle(if (confirm) "Zaxira uçun bosh parol" else "Zaxira bosh paroli")
+            .setMessage(if (confirm) "Bu parolni unutsangiz, zaxirani oçib bölmaydi." else null)
+            .setView(box)
+            .setPositiveButton("Davom etiş") { _, _ ->
+                val a = p1.text.toString()
+                if (a.length < 8) {
+                    Toast.makeText(this, "Bosh parol kamida 8 belgi bölsin", Toast.LENGTH_SHORT).show()
+                } else if (confirm && a != p2.text.toString()) {
+                    Toast.makeText(this, "Parollar mos kelmadi", Toast.LENGTH_SHORT).show()
+                } else {
+                    onOk(a.toCharArray())
+                }
+            }
+            .setNegativeButton("Bekor qiliş", null)
+            .show()
+    }
+
+    private fun exportVault() {
+        withOpenVault {
+            askPassphrase(confirm = true) { pass ->
+                Thread {
+                    val blob = try {
+                        Vault.exportBlob(pass)
+                    } catch (t: Throwable) {
+                        null
+                    } finally {
+                        pass.fill(' ')
+                    }
+                    runOnUiThread {
+                        if (blob == null) {
+                            Toast.makeText(this, "Zaxira tayyorlanmadi", Toast.LENGTH_SHORT).show()
+                        } else {
+                            pendingExport = blob
+                            val i = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                                .addCategory(Intent.CATEGORY_OPENABLE)
+                                .setType("application/octet-stream")
+                                .putExtra(Intent.EXTRA_TITLE, "soz-parollar.szp")
+                            try {
+                                startActivityForResult(i, REQ_EXPORT)
+                            } catch (t: Throwable) {
+                                pendingExport = null
+                                Toast.makeText(this, "Fayl oynasi oçilmadi", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }.start()
+            }
+        }
+    }
+
+    private fun importVault() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+        try {
+            startActivityForResult(i, REQ_IMPORT)
+        } catch (t: Throwable) {
+            Toast.makeText(this, "Fayl oynasi oçilmadi", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun wipeVault() {
+        AlertDialog.Builder(this)
+            .setTitle("Hamma parollar öçirilsinmi?")
+            .setMessage("Saqlangan barça kirişlar va ularning kaliti butunlay öçiriladi. Buni qaytarib bölmaydi.")
+            .setPositiveButton("Öçiriş") { _, _ ->
+                Vault.wipe(this)
+                refreshVaultCard()
+                Toast.makeText(this, "Parollar öçirildi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Bekor qiliş", null)
+            .show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        when (requestCode) {
+            REQ_EXPORT -> {
+                val blob = pendingExport
+                pendingExport = null
+                if (resultCode != RESULT_OK || uri == null || blob == null) return
+                try {
+                    contentResolver.openOutputStream(uri)?.use { it.write(blob) }
+                    Toast.makeText(this, "Zaxira nusxa saqlandi", Toast.LENGTH_SHORT).show()
+                } catch (t: Throwable) {
+                    Toast.makeText(this, "Zaxira yozilmadi", Toast.LENGTH_SHORT).show()
+                }
+            }
+            REQ_IMPORT -> {
+                if (resultCode != RESULT_OK || uri == null) return
+                val bytes = try {
+                    contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } catch (t: Throwable) {
+                    null
+                }
+                if (bytes == null || bytes.size > 5 shl 20) {
+                    Toast.makeText(this, "Fayl öqilmadi", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                askPassphrase(confirm = false) { pass ->
+                    Thread {
+                        val n = try {
+                            Vault.importBlob(applicationContext, bytes, pass)
+                        } catch (e: VaultCrypto.NoScreenLock) {
+                            -1
+                        } catch (t: Throwable) {
+                            null
+                        } finally {
+                            pass.fill(' ')
+                        }
+                        runOnUiThread {
+                            Toast.makeText(
+                                this,
+                                when (n) {
+                                    null -> "Bosh parol notöğri yoki fayl buzuq"
+                                    -1 -> "Avval telefonda ekran qulfini qöying"
+                                    else -> "$n ta kiriş tiklandi"
+                                },
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            refreshVaultCard()
+                        }
+                    }.start()
+                }
+            }
         }
     }
 
@@ -356,7 +713,9 @@ class SettingsActivity : Activity() {
                     "• UzCrawl — tahrirchi (Apache-2.0): özbekça Telegram bloglari va yangiliklar\n" +
                     "• UzBooks — tahrirchi (Apache-2.0): özbekça badiiy kitoblar (faqat söz statistikasi)\n" +
                     "• Tatoeba — tatoeba.org (CC BY 2.0 FR): inglizça va ruscha gaplar\n" +
-                    "Emoji paneli: AndroidX Emoji2 (Apache-2.0).",
+                    "Emoji paneli: AndroidX Emoji2 (Apache-2.0).\n" +
+                    "Tor: Orbot — Guardian Project (alohida ilova). Tarjima: Google Cloud Translation yoki " +
+                    "Microsoft Azure Translator (sizning kalitingiz bilan).",
                 13f, ink,
             ),
         )
@@ -559,5 +918,10 @@ class SettingsActivity : Activity() {
         }
         parent.addView(head, lp())
         parent.addView(bars, lp())
+    }
+
+    private companion object {
+        const val REQ_EXPORT = 61
+        const val REQ_IMPORT = 62
     }
 }

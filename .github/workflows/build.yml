@@ -1,8 +1,9 @@
 name: build
 
+# "Söz+" (toliq branch): tarjimon (faqat Tor orqali) va parollar ombori bilan.
 on:
   push:
-    branches: [main]
+    branches: [toliq]
     paths-ignore: ["**.md"]
   workflow_dispatch:
 
@@ -41,31 +42,48 @@ jobs:
           fi
           echo "KEYSTORE_FILE=$RUNNER_TEMP/alifbo.p12" >> "$GITHUB_ENV"
 
-      - name: Testlar (maketlar va alifbo)
+      - name: Sizib chiqishga qarshi (tarmoq kodi faqat TorNet.kt da)
+        run: |
+          PATTERN='java\.net\.|javax\.net\.|HttpURLConnection|HttpsURLConnection|okhttp|WebView|DatagramSocket'
+          BAD="$(grep -rlE "$PATTERN" app/src/main/java | grep -v '/TorNet\.kt$' || true)"
+          if [ -n "$BAD" ]; then
+            echo "XATO: tarmoq API'si TorNet.kt dan tashqarida:"
+            echo "$BAD"
+            exit 1
+          fi
+          # TorNet faqat 127.0.0.1 dagi Orbot SOCKS portiga ulanadi, to'g'ridan-to'g'ri yo'l yo'q
+          grep -q 'Proxy.NO_PROXY' app/src/main/java/uz/alifbo/klaviatura/TorNet.kt
+          grep -q 'byteArrayOf(127, 0, 0, 1)' app/src/main/java/uz/alifbo/klaviatura/TorNet.kt
+          echo "Tarmoq kodi faqat TorNet.kt da (Tor orqali)."
+
+      - name: Testlar (maketlar, alifbo, Tor, tarjima, parollar)
         run: gradle --no-daemon testDebugUnitTest
 
       - name: Dizayn rasmlari
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ekranlar
+          name: ekranlar-toliq
           path: app/build/screens/
           if-no-files-found: warn
 
       - name: APK yig'ish
         run: gradle --no-daemon assembleRelease
 
-      - name: Ruxsatlarni tekshirish (INTERNET bo'lmasligi shart)
+      - name: Ruxsatlarni tekshirish (faqat INTERNET va USE_BIOMETRIC)
         run: |
           BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           APK="$(ls app/build/outputs/apk/release/*.apk | head -1)"
           echo "APK: $APK"
           "$BT/aapt2" dump permissions "$APK" | tee permissions.txt
-          if grep -q "android.permission.INTERNET" permissions.txt; then
-            echo "XATO: APK'da INTERNET ruxsati bor"
+          ALLOWED='^(android\.permission\.INTERNET|android\.permission\.USE_BIOMETRIC|uz\.alifbo\.klaviatura\.toliq\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION)$'
+          EXTRA="$(grep 'uses-permission' permissions.txt | sed -E "s/.*name='([^']+)'.*/\1/" | grep -vE "$ALLOWED" || true)"
+          if [ -n "$EXTRA" ]; then
+            echo "XATO: kutilmagan ruxsat:"
+            echo "$EXTRA"
             exit 1
           fi
-          echo "Ruxsatlar toza: INTERNET yo'q."
+          echo "Ruxsatlar: faqat INTERNET (Tor orqali tarjima) va USE_BIOMETRIC (parollar)."
 
       - name: Imzo sertifikati
         run: |
@@ -74,6 +92,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: alifbo-apk
+          name: soz-toliq-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error

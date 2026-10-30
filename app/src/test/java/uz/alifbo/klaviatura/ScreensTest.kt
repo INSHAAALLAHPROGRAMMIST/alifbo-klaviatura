@@ -121,6 +121,61 @@ class ScreensTest {
         }
         File(outDir, "bufer_tmp.png").delete()
         save("belgilar2_qora", root(Themes.dark, Lang.UZ, page = Page.SYM2, suggestions = emptyList()), screenW)
+        tarjimaVaParollar()
+    }
+
+    private object NoTr : TranslateHandler {
+        override fun onTrSend() {}
+        override fun onTrClose() {}
+        override fun onTrTarget(code: String) {}
+        override fun onTrSwap() {}
+        override fun onTrPasteClip() {}
+        override fun onTrInsert() {}
+        override fun onTrCopy() {}
+        override fun onTrStatusTap() {}
+    }
+
+    private object NoVault : VaultHandler {
+        override fun onVaultFill(c: Cred) {}
+        override fun onVaultDelete(c: Cred) {}
+        override fun onVaultUseGenerated(password: String) {}
+        override fun onVaultRegenerate() {}
+        override fun onVaultUnlock() {}
+        override fun onVaultLock() {}
+    }
+
+    /** Söz+ (toliq): tarjima qatori, parol maydonidagi qator va parollar paneli. */
+    private fun tarjimaVaParollar() {
+        val tr = root(Themes.light, Lang.UZ, suggestions = listOf("uçraşamizmi", "uçraşamiz", "uçraşuv"))
+        tr.showTranslate(NoTr)
+        tr.trBar.render(TrState("UZ", "EN", "Ertaga soat beşda uçraşamizmi?", result = "Shall we meet tomorrow at five?"))
+        save("tarjima_yorug", tr, screenW)
+        val trq = root(Themes.dark, Lang.UZ, suggestions = emptyList())
+        trq.showTranslate(NoTr)
+        trq.trBar.render(TrState("UZ", "RU", "Salom, qalaysiz?", busy = true, status = "Tor orqali tarjima qilinmoqda…"))
+        save("tarjima_qora", trq, screenW)
+
+        val pw = root(Themes.light, Lang.UZ, suggestions = emptyList())
+        pw.strip.actions = listOf(
+            StripAction(1, StripAction.ICON_KEY, "alisher@mail.uz"),
+            StripAction(3, StripAction.ICON_DICE, "Kuçliroq: Xk7#pQ2m!vR9aT", accent = true),
+        )
+        save("parol_qatori_yorug", pw, screenW)
+
+        val mine = listOf(Cred("1", "org.telegram.messenger", "Telegram", "+998 90 123 45 67", "x", 3))
+        val others = listOf(
+            Cred("2", "uz.click", "Click", "alisher@mail.uz", "y", 2),
+            Cred("3", "com.android.chrome", "Chrome", "alisher_t", "z", 1),
+        )
+        for ((name, t) in listOf("yorug" to Themes.light, "qora" to Themes.dark)) {
+            val r = root(t, Lang.UZ, suggestions = emptyList())
+            save("parol_tmp", r, screenW)
+            r.showVault(VaultState(true, mine, others, "Xk7#pQ2m!vR9aTe4"), NoVault)
+            save("parollar_paneli_$name", r, screenW)
+            r.showVault(VaultState(false, emptyList(), emptyList(), "Xk7#pQ2m!vR9aTe4"), NoVault)
+            save("parollar_qulfli_$name", r, screenW)
+        }
+        File(outDir, "parol_tmp.png").delete()
     }
 
     @Test

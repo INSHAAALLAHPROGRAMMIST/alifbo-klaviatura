@@ -4,6 +4,36 @@ Tizim klaviaturasi (`InputMethodService`): Telegram'da, brauzerda, SMS'da — ha
 Ilova nomi «Söz»; ichki identifikator (`uz.alifbo.klaviatura`) va repo nomi özgarmagan, şuning uçun
 yangi versiyalar avvalgisining ustidan örnatilaveradi.
 
+## Söz+ (`toliq` branch)
+
+Asosiy «Söz» internetsiz qoladi. Bu branchdagi «Söz+» — alohida ilova (`uz.alifbo.klaviatura.toliq`),
+telefonga «Söz» bilan yonma-yon örnatiladi va ikki narsa qöşadi:
+
+- **Tarjimon (faqat Tor orqali).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi: tugmalar
+  ilovaga emas, şu qatorga yozadi; ➤ — tarjima, «Qöyiş» — maydonga qöyiş, 📋 — buferdagi matnni tarjima.
+  Xizmat — sizning kalitingiz bilan rasmiy Google Cloud Translation (oyiga 500 ming belgigaça bepul) yoki
+  Microsoft Azure Translator (2 mln). Yangi alifbodagi matn xizmatga eski imloda (oʻ, sh…) yuboriladi,
+  natija yangi alifboga (yoki kirillga) qaytariladi.
+- **Parollar ombori.** Kiriş maydonidan çiqilganda login (email / telefon / foydalanuvçi nomi) va parol
+  şifrlab eslab qolinadi; keyingi safar qatorda 🔑 — telefon qulfi bilan tasdiqlab töldiriladi. Zaif parol
+  yozilsa yoki yangi parol maydonida kuçli parol taklif qilinadi. Bosh parol bilan şifrlangan zaxira nusxa.
+
+Sizib çiqişga qarşi:
+
+- Tarmoq kodi faqat `TorNet.kt` da (CI boşqa faylda `java.net`/`javax.net` paydo bölsa yiğişni töxtatadi).
+  U faqat `127.0.0.1:9050` dagi Orbot SOCKS5 portiga ulanadi, manzilni Tor hal qiladi (DNS ham telefondan
+  çiqmaydi). To'ğridan-to'ğri ulaniş yöli yöq: Tor işlamasa, matn heç qayerga ketmaydi.
+- Har söroqqa tasodifiy SOCKS login: Tor har biriga alohida zanjir quradi.
+- `network_security_config.xml`: faqat ikki tarjima manziliga TLS mumkin, boşqa hamma manzil uçun
+  işonçli sertifikat yöq, şifrlanmagan HTTP taqiqlangan.
+- Söroqda faqat matn va kalit: cookie, User-Agent, qurilma yoki ilova belgisi yöq.
+- Parol maydonlarida tarjima öçiq; parollar ombori tarmoq kodiga ulanmagan.
+- Ombor: AndroidKeyStore'dagi RSA-2048 (maxfiy kalit faqat telefon qulfi tasdiqlangandan keyin 5 daqiqa
+  işlaydi) + AES-256-GCM. Qulfli paytda yangi parol oçiq kalit bilan şifrlab qö'yiladi. «Bu ilovada parol
+  bormi» degan körsatkiç ham HMAC bilan: ilova nomi ham, parol ham oçiq yozilmaydi. Ekran öçganda yoki
+  15 daqiqadan keyin ombor yana qulflanadi; ombor oçiq paytda klaviatura oynasi ekran rasmidan yaşiriladi.
+- CI ruxsatlarni tekşiradi: faqat `INTERNET` va `USE_BIOMETRIC`.
+
 ## Alifbo
 
 Maket 2026-yil 21-oktyabrda imzolangan **O'RQ-1184-son** qonundagi alifboga asoslangan:

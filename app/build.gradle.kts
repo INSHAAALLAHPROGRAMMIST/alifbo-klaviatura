@@ -13,13 +13,14 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "uz.alifbo.klaviatura"
+        // "Söz+" (toliq branch): asosiy "Söz" bilan yonma-yon o'rnatiladi
+        applicationId = "uz.alifbo.klaviatura.toliq"
         minSdk = 26
         targetSdk = 34
         // CI'dagi har yig'ish raqami: yangi versiya eskisining ustiga o'rnatilishi uchun o'sib boradi
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
-        versionName = "0.3.$run"
+        versionName = "0.4.$run"
     }
 
     signingConfigs {

@@ -69,6 +69,31 @@ class Prefs(private val context: Context) {
         get() = int("clipEpoch", 0)
         set(v) = putInt("clipEpoch", v)
 
+    /** Tarjima xizmati: Translator.GOOGLE yoki Translator.AZURE. Kalitning o'zi Secrets'da (shifrlangan). */
+    var trEngine: Int
+        get() = int("trEngine", Translator.GOOGLE)
+        set(v) = putInt("trEngine", v)
+
+    /** Tarjima qilinadigan til (Translator.targets kodi). */
+    var trTarget: String
+        get() = sp.getString("trTarget", "en") ?: "en"
+        set(v) { sp.edit().putString("trTarget", v).apply() }
+
+    /** Azure resursining mintaqasi (masalan westeurope); global resurs uchun bo'sh. */
+    var azureRegion: String
+        get() = sp.getString("azureRegion", "") ?: ""
+        set(v) { sp.edit().putString("azureRegion", v).apply() }
+
+    /** Kirish maydonlariga yozilgan parollarni shifrlab eslab qolish. */
+    var vaultAutoSave: Boolean
+        get() = bool("vaultAutoSave", true)
+        set(v) = putBool("vaultAutoSave", v)
+
+    /** Zaif parol yozilganda yoki yangi parol maydonida kuchli parol taklif qilish. */
+    var vaultSuggest: Boolean
+        get() = bool("vaultSuggest", true)
+        set(v) = putBool("vaultSuggest", v)
+
     /** Tahmin qatori (so'z takliflari). */
     var predict: Boolean
         get() = bool("predict", true)

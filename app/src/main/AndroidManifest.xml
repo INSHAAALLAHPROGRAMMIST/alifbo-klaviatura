@@ -3,6 +3,16 @@
 
     <!-- Ataylab hech qanday <uses-permission> yo'q: ilova internetga ulana olmaydi. -->
 
+    <!-- Tarjima: telefondagi tarjima ilovasini (Google Tarjimon va h.k.) topish uchun -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <package android:name="com.google.android.apps.translate" />
+        <package android:name="com.android.vending" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -20,6 +30,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".TranslateActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".AlifboIme"

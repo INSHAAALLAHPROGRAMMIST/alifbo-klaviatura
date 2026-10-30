@@ -106,6 +106,25 @@ object Icons {
         }
     }
 
+    private val clipboardPath = Path().apply {
+        addRoundRect(RectF(-0.72f, -0.72f, 0.72f, 1f), 0.18f, 0.18f, Path.Direction.CW)
+        moveTo(-0.38f, 0.05f); lineTo(0.38f, 0.05f)
+        moveTo(-0.38f, 0.45f); lineTo(0.22f, 0.45f)
+    }
+
+    private val clipboardTop = Path().apply {
+        addRoundRect(RectF(-0.36f, -0.98f, 0.36f, -0.56f), 0.14f, 0.14f, Path.Direction.CW)
+    }
+
+    /** Bufer (nusxalar tarixi) belgisi: qisqichli taxtacha. */
+    fun clipboard(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
+        stroke(p, s)
+        p.strokeWidth = s * 0.09f
+        c.drawPath(place(clipboardPath, cx, cy, s), p)
+        p.style = Paint.Style.FILL
+        c.drawPath(place(clipboardTop, cx, cy, s), p)
+    }
+
     fun globe(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
         stroke(p, s)
         p.strokeWidth = s * 0.075f

@@ -88,6 +88,8 @@ class SettingsActivity : Activity() {
         buildSizeCard()
         buildOptionsCard()
         buildPredictCard()
+        buildClipboardCard()
+        buildTranslateCard()
         buildLangCard()
         buildSourcesCard()
 
@@ -300,6 +302,49 @@ class SettingsActivity : Activity() {
                 prefs.setEnabledLangs(Lang.entries.filter { it in enabled })
             }
             c.addView(cb)
+        }
+    }
+
+    private fun buildClipboardCard() {
+        val c = card("Bufer")
+        switchRow(c, "Nusxalar tarixini saqlaş", prefs.clipboardHistory) { prefs.clipboardHistory = it }
+        c.addView(
+            label(
+                "Nusxa olingan har bir matn şu yerda saqlanadi: eng yangisi tepada, eskilari ham turaveradi. " +
+                    "Tahmin qatoridagi 📋 tugmasi tarixni oçadi; ☆ — qadab qö'yiş, ✕ — öçiriş. Yangi nusxa " +
+                    "15 daqiqa davomida yozişdan oldin qatorda taklif qilinadi. Parol menejerlari maxfiy deb " +
+                    "belgilagan nusxalar saqlanmaydi va parol maydonlarida taklif qilinmaydi. Tarix faqat telefonda.",
+                12f, muted,
+            ),
+            lp().apply { topMargin = dpi(6) },
+        )
+        c.addView(pill("Bufer tarixini öçiriş") { clearClipboard() }, lp().apply { topMargin = dpi(10) })
+    }
+
+    private fun clearClipboard() {
+        File(filesDir, "clipboard.txt").delete()
+        prefs.clipboardEpoch = prefs.clipboardEpoch + 1
+        Toast.makeText(this, "Bufer tarixi öçirildi", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun buildTranslateCard() {
+        val c = card("Tarjima")
+        c.addView(
+            label(
+                "Tahmin qatoridagi «A文» tugmasi belgilangan matnni (yoki maydondagi butun matnni) telefoningizdagi " +
+                    "Google Tarjimon ilovasiga uzatadi va tarjimani örniga qö'yadi. Klaviaturaning özi internetga " +
+                    "ulanmaydi: matn faqat siz tugmani bosganingizda Google Tarjimonga ketadi. Tarjima avtomatik " +
+                    "qaytmasa, uni nusxalang — bufer uni ilib oladi va qatorda taklif qiladi.",
+                12f, muted,
+            ),
+        )
+        val installed = TranslateBridge.isGoogleTranslateInstalled(packageManager)
+        c.addView(
+            label(if (installed) "✓ Google Tarjimon örnatilgan" else "Google Tarjimon örnatilmagan", 13f, if (installed) accent else muted),
+            lp().apply { topMargin = dpi(8) },
+        )
+        if (!installed) {
+            c.addView(pill("Google Tarjimonni örnatiş") { TranslateBridge.openStore(this) }, lp().apply { topMargin = dpi(8) })
         }
     }
 

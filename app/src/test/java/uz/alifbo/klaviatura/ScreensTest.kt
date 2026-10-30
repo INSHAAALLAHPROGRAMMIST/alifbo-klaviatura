@@ -97,6 +97,29 @@ class ScreensTest {
         val fix = root(Themes.light, Lang.UZ, suggestions = listOf("yaxşi", "“yaxsi”", "yaxşilab"))
         fix.strip.highlightBest = true
         save("tuzatish_yorug", fix, screenW)
+        // yozish boshida oxirgi nusxa taklifi
+        val clip = root(Themes.light, Lang.UZ, suggestions = listOf("bugun", "men", "bu"))
+        clip.strip.clipText = "Toşkent şahri, Amir Temur ko'çasi 15-uy\n(ikkinçi qavat)"
+        save("bufer_taklifi_yorug", clip, screenW)
+        // bufer paneli
+        for ((name, t) in listOf("yorug" to Themes.light, "qora" to Themes.dark)) {
+            val r = root(t, Lang.UZ, suggestions = emptyList())
+            save("bufer_tmp", r, screenW)
+            val store = ClipboardStore()
+            store.add("Assalomu alaykum! Ertaga soat 10:00 da uçraşamiz.", 1000)
+            store.add("https://github.com/INSHAAALLAHPROGRAMMIST/alifbo-klaviatura", 2000)
+            store.add("Toşkent şahri, Amir Temur ko'çasi 15-uy", 3000)
+            store.togglePin("Assalomu alaykum! Ertaga soat 10:00 da uçraşamiz.")
+            store.add("+998 90 123 45 67", 4000)
+            r.showClipboard(store.sorted(), object : ClipboardHandler {
+                override fun onClipPaste(text: String) {}
+                override fun onClipPin(text: String) {}
+                override fun onClipDelete(text: String) {}
+                override fun onClipClear() {}
+            })
+            save("bufer_paneli_$name", r, screenW)
+        }
+        File(outDir, "bufer_tmp.png").delete()
         save("belgilar2_qora", root(Themes.dark, Lang.UZ, page = Page.SYM2, suggestions = emptyList()), screenW)
     }
 

@@ -45,12 +45,16 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
         overlay.theme = t
         keyboard.invalidate()
         emoji?.applyTheme(t)
+        clipboard?.applyTheme(t)
     }
 
     val isEmojiShown: Boolean get() = emoji?.visibility == View.VISIBLE
 
+    private fun panelHeight(): Int = if (keyboard.height > 0) keyboard.height else keyboard.measuredHeight
+
     fun showEmoji(listener: KeyboardListener) {
-        val h = if (keyboard.height > 0) keyboard.height else keyboard.measuredHeight
+        val h = panelHeight()
+        hideClipboard()
         val panel = emoji ?: EmojiPanel(context, onEmojiPick, onEmojiDelete, onEmojiBack).also {
             emoji = it
             body.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
@@ -63,7 +67,36 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
 
     fun hideEmoji() {
         emoji?.visibility = View.GONE
-        keyboard.visibility = View.VISIBLE
+        if (clipboard?.visibility != View.VISIBLE) keyboard.visibility = View.VISIBLE
+    }
+
+    private var clipboard: ClipboardPanel? = null
+
+    val isClipboardShown: Boolean get() = clipboard?.visibility == View.VISIBLE
+
+    /** Nusxalar tarixi paneli klaviatura o'rnida (bir xil balandlikda). */
+    fun showClipboard(items: List<Clip>, handler: ClipboardHandler) {
+        val h = if (isEmojiShown) emoji!!.height else panelHeight()
+        emoji?.visibility = View.GONE
+        val panel = clipboard ?: ClipboardPanel(context) { hideClipboard() }.also {
+            clipboard = it
+            body.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
+        }
+        panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h }
+        panel.handler = handler
+        panel.applyTheme(theme)
+        panel.setItems(items)
+        panel.visibility = View.VISIBLE
+        keyboard.visibility = View.GONE
+    }
+
+    fun updateClipboard(items: List<Clip>) {
+        clipboard?.takeIf { it.visibility == View.VISIBLE }?.setItems(items)
+    }
+
+    fun hideClipboard() {
+        clipboard?.visibility = View.GONE
+        if (!isEmojiShown) keyboard.visibility = View.VISIBLE
     }
 
     companion object {

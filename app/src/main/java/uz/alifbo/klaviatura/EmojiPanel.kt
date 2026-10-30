@@ -18,7 +18,7 @@ import androidx.emoji2.emojipicker.EmojiPickerView
 
 /** Pastki qatordagi "ABC" va o'chirish tugmalari. */
 @SuppressLint("ClickableViewAccessibility")
-private class BarButton(
+internal class BarButton(
     context: Context,
     private val label: String?,
     private val onTap: () -> Unit,

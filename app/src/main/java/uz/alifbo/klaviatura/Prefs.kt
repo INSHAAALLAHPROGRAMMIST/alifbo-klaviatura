@@ -59,6 +59,16 @@ class Prefs(private val context: Context) {
         get() = int("uzLayout", if (bool("uzFast", false)) Layouts.UZ_FAST else Layouts.UZ_QWERTY)
         set(v) = putInt("uzLayout", v)
 
+    /** Nusxalar tarixi (bufer): nusxa olingan matnlar telefonda saqlanadi va taklif qilinadi. */
+    var clipboardHistory: Boolean
+        get() = bool("clipHistory", true)
+        set(v) = putBool("clipHistory", v)
+
+    /** Bufer tarixini o'chirganda oshiriladi: klaviatura xotiradagi nusxani tashlab yuboradi. */
+    var clipboardEpoch: Int
+        get() = int("clipEpoch", 0)
+        set(v) = putInt("clipEpoch", v)
+
     /** Tahmin qatori (so'z takliflari). */
     var predict: Boolean
         get() = bool("predict", true)

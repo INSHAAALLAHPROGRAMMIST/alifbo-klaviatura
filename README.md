@@ -73,6 +73,21 @@ Har qanday tugmani yuqoriga sürish — uning birinçi qö'şimça belgisi (yaş
 Probelni yonga sürish yoki globusni bosiş — tilni almaştiradi; globus içida emoji ham bor:
 globusni yuqoriga sürish — emoji paneli, uzoq bosiş — emoji va til tanlagiç.
 
+## Bufer (nusxalar tarixi)
+
+Nusxa olingan har bir matn telefonda saqlanadi (`files/clipboard.txt`): eng yangisi tepada,
+eskilari turaveradi (qadalmaganlardan oxirgi 100 tasi, qadalganlari çeksiz). Tahmin qatoridagi 📋
+tugmasi panelni oçadi: bosiş — yoziladi, ☆ — qadab qö'yiş, ✕ — öçiriş, «Tozalaş» — qadalmaganlarni
+öçiriş. Yangi nusxa 15 daqiqa davomida maydonga yozişdan oldin qatorda taklif qilinadi.
+Parol menejerlari `IS_SENSITIVE` deb belgilagan nusxalar saqlanmaydi, parol maydonlarida taklif yöq.
+
+## Tarjima
+
+Klaviaturaning özi internetga ulanmaydi (INTERNET ruxsati yöq). «A文» tugmasi belgilangan matnni
+(yoki maydondagi butun matnni) Android'ning `PROCESS_TEXT` yöli bilan telefondagi tarjima ilovasiga
+(avvalo Google Tarjimon, keyin Yandex, DeepL) uzatadi; ilova tarjimani qaytarsa, matn örniga
+qö'yiladi. Qaytarmasa, tarjimani nusxalash kifoya — bufer uni ilib oladi va qatorda taklif qiladi.
+
 ## Tuzatiş
 
 Yozilgan söz lug'atda bölmasa, tuzatilgan şakli tahmin qatorining örtasida çiqadi. Yangi alifbo

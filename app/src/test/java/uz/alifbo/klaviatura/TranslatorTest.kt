@@ -40,6 +40,34 @@ class TranslatorTest {
     }
 
     @Test
+    fun googleXatoSababiKorinadi() {
+        val billing = """{"error":{"code":403,"message":"This API method requires billing to be enabled.","status":"PERMISSION_DENIED",
+            "details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"BILLING_DISABLED"}]}}"""
+        val b = Translator.httpFailure(403, billing)
+        assertTrue(b.userMessage, b.userMessage.contains("billing"))
+        assertTrue(b.userMessage.contains("BILLING_DISABLED"))
+        assertFalse(b.retry)
+
+        val disabled = """{"error":{"code":403,"message":"Cloud Translation API has not been used in project 1 before or it is disabled.",
+            "status":"PERMISSION_DENIED","details":[{"reason":"SERVICE_DISABLED"}]}}"""
+        assertTrue(Translator.httpFailure(403, disabled).userMessage.contains("yoqilmagan"))
+
+        val android = """{"error":{"code":403,"message":"Requests from this Android client application <empty> are blocked.",
+            "status":"PERMISSION_DENIED","details":[{"reason":"API_KEY_ANDROID_APP_BLOCKED"}]}}"""
+        assertTrue(Translator.httpFailure(403, android).userMessage.contains("Application restrictions"))
+    }
+
+    @Test
+    fun torChiqishTuguniToSilsaQaytaUrinadi() {
+        // Google "g'alati trafik" sahifasi (JSON emas): boshqa Tor zanjiri bilan qayta urinish kerak
+        val html = "<html><body>We're sorry... but your computer or network may be sending automated queries.</body></html>"
+        val f = Translator.httpFailure(403, html)
+        assertTrue(f.retry)
+        assertTrue(f.userMessage.contains("Tor"))
+        assertTrue(Translator.httpFailure(503, "Service Unavailable").retry)
+    }
+
+    @Test
     fun azureSorovVaJavob() {
         assertEquals("/translate?api-version=3.0&textType=plain&to=en&from=uz", Translator.azurePath("uz", "en"))
         assertEquals("/translate?api-version=3.0&textType=plain&to=ru", Translator.azurePath(null, "ru"))

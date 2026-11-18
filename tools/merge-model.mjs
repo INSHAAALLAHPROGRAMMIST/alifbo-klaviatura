@@ -28,6 +28,10 @@ const ctxMin = Number(opt('ctx-min', '5'));
 const kHigh = Number(opt('k-high', '4'));
 const maxOrder = Math.min(5, Math.max(2, Number(opt('max-order', '5'))));
 const keepCap = { 3: Number(opt('keep3', '200000')), 4: Number(opt('keep4', '100000')), 5: Number(opt('keep5', '50000')) };
+// --norm N: yozishdan oldin sanoqlar korpus N so'zli bo'lgandek kichraytiriladi. Ilovadagi ball qoidalari
+// (shaxsiy so'zlar ustunligi, avtotuzatish chegarasi) ~1e8 so'zli model shkalasiga sozlangan, q esa
+// 255 da kesiladi: milliardlab so'zda eng ko'p uchraydiganlar bir-biridan ajralmay qoladi.
+const norm = Number(opt('norm', '0'));
 // "papka@N" — shu bo'lak sanoqlari N ga ko'paytiriladi (kichik, lekin muhim korpusga og'irlik berish uchun)
 const dirs = [];
 {
@@ -241,9 +245,17 @@ for (let n = 3; n <= maxOrder; n++) {
 }
 
 // ---------------------------------------------------------------- yozish
+// Tanlash va saralash xom sanoq bilan bo'ldi; normallash faqat q (log2 * 10) shkalasini suradi.
+const f = norm > 0 ? norm / tokenTotal : 1;
+const scaleRow = (row) => row.map(([id, c]) => [id, c * f]);
+if (f !== 1) {
+  for (let i = 0; i < bigramFinal.length; i++) bigramFinal[i] = scaleRow(bigramFinal[i]);
+  for (const n in storedByOrder) for (const e of storedByOrder[n]) e.entries = scaleRow(e.entries);
+  log(`normallash: x${f.toExponential(3)} (${norm} so'zli korpus shkalasi)`);
+}
 const { data, bigramEntries, higherInfo } = encodeAlm2(
   vocab,
-  (i) => (vocab[i] === START ? 0 : q(countOf.get(vocab[i]))),
+  (i) => (vocab[i] === START ? 0 : q(countOf.get(vocab[i]) * f)),
   bigramFinal,
   storedByOrder,
   maxOrder,

@@ -111,7 +111,7 @@ jobs:
           mkdir -p models
           for L in uz uzc; do
             node tools/merge-model.mjs --lang "$L" --in counts/*/"$L" --out "models/lm_$L.bin" \
-              --max-vocab 65000 --min-count 3 --min-bigram 2 --ctx-min 5 \
+              --max-vocab 65000 --min-count 3 --min-bigram 2 --ctx-min 5 --norm 100000000 \
               --keep3 200000 --keep4 100000 --keep5 50000 | tee "models/stats_$L.txt"
           done
 

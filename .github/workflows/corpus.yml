@@ -1,0 +1,130 @@
+name: corpus
+
+# Vazirlik korpusidan (Digitaluz/uzbek-language-corpus: 5,6 mln hujjat, 6 mlrd so'z, ODC-By) o'zbek lotin
+# va o'zbek kirill tahmin modellarini yasaydi. Bitta server 6 mlrd so'zni 6 soatda ulgurmaydi, shuning uchun:
+#   1) count: fayllar guruhlarga bo'linadi, har guruh alohida serverda sanaladi (parallel);
+#   2) merge: sanoqlar bitta serverda birlashtirilib ALM2 model yoziladi.
+# Ba'zi guruhlar yiqilsa ham qolganlari birlashtiriladi (natijada nechta bo'lak kirgani yoziladi).
+# Qo'lda ishga tushiriladi; natijani tekshirib, app/src/main/assets ga qo'shamiz.
+on:
+  workflow_dispatch:
+    inputs:
+      fayllar:
+        description: "Nechta parquet fayl (1..136); sinov uchun kichik son"
+        default: "136"
+      guruh:
+        description: "Bir serverga nechta fayl"
+        default: "4"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      groups: ${{ steps.p.outputs.groups }}
+    steps:
+      - id: p
+        run: |
+          python3 - "${{ inputs.fayllar }}" "${{ inputs.guruh }}" >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, sys
+          n = max(1, min(136, int(sys.argv[1])))
+          g = max(1, int(sys.argv[2]))
+          print("groups=" + json.dumps([" ".join(str(j) for j in range(i, min(i + g, n))) for i in range(0, n, g)]))
+          EOF
+
+  count:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        files: ${{ fromJSON(needs.plan.outputs.groups) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Korpus bo'lagini yuklash va matnga aylantirish
+        run: |
+          pip install --quiet pyarrow
+          mkdir -p corpus
+          HF=https://huggingface.co/datasets/Digitaluz/uzbek-language-corpus/resolve/main/data
+          for i in ${{ matrix.files }}; do
+            f=$(printf "train-%05d-of-00136.parquet" "$i")
+            curl -L --fail --retry 5 --retry-delay 15 -sS -o corpus/part.parquet "$HF/$f"
+            python3 tools/corpus-to-text.py corpus/part.parquet corpus/uz.txt corpus/uzc.txt
+            rm -f corpus/part.parquet
+          done
+          touch corpus/uz.txt corpus/uzc.txt
+          ls -la corpus
+          df -h . | tail -1
+
+      - name: Sanash (o'zbek lotin)
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+        run: |
+          node tools/count-shard.mjs --lang uz --in corpus/uz.txt --out counts/uz
+          rm -f corpus/uz.txt
+
+      - name: Sanash (o'zbek kirill)
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+        run: node tools/count-shard.mjs --lang uzc --in corpus/uzc.txt --out counts/uzc
+
+      - name: Bo'lak raqami
+        id: idx
+        run: echo "name=$(echo '${{ matrix.files }}' | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: counts-${{ steps.idx.outputs.name }}
+          path: counts/
+          retention-days: 5
+          compression-level: 0
+
+  merge:
+    needs: count
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: counts-*
+          path: counts
+
+      - name: Birlashtirish
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+        run: |
+          echo "Bo'laklar: $(ls counts | wc -l)"
+          du -sh counts
+          mkdir -p models
+          for L in uz uzc; do
+            node tools/merge-model.mjs --lang "$L" --in counts/*/"$L" --out "models/lm_$L.bin" \
+              --max-vocab 65000 --min-count 3 --min-bigram 2 --ctx-min 5 \
+              --keep3 200000 --keep4 100000 --keep5 50000 | tee "models/stats_$L.txt"
+          done
+
+      - name: Tekshirish
+        run: |
+          node tools/query-model.mjs models/lm_uz.bin --check
+          node tools/query-model.mjs models/lm_uz.bin --next '<s>' --ctx "men bugun" --prefix yax
+          node tools/query-model.mjs models/lm_uz.bin --ctx "assalomu alaykum"
+          node tools/query-model.mjs models/lm_uzc.bin --check
+          node tools/query-model.mjs models/lm_uzc.bin --next '<s>' --ctx "мен бугун" --prefix ях
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: korpus-modellar
+          path: models/
+          if-no-files-found: error

@@ -32,6 +32,18 @@ const keepCap = { 3: Number(opt('keep3', '200000')), 4: Number(opt('keep4', '100
 // (shaxsiy so'zlar ustunligi, avtotuzatish chegarasi) ~1e8 so'zli model shkalasiga sozlangan, q esa
 // 255 da kesiladi: milliardlab so'zda eng ko'p uchraydiganlar bir-biridan ajralmay qoladi.
 const norm = Number(opt('norm', '0'));
+// --confusion-ratio R: o'zbekcha harflarsiz yozilgan xato shakllarni lug'atdan chiqaradi: kirill klaviaturasidan
+// (булган, куп, хозир, булған) va lotinda apostrofsiz (bolgan, kop, togri). 1-2 harfni almashtirganda R marta
+// ko'p uchraydigan so'z chiqsa, so'z xato deb olinadi. Lug'atda qolsa, ilova uni "ma'lum so'z" deb tuzatmaydi
+// yoki "bulgan" ni "bölgan" emas, "bulğan" qiladi. keep — shu yo'l bilan tushib qoladigan haqiqiy so'zlar.
+const confusionRatio = Number(opt('confusion-ratio', '0'));
+const CONFUSION = {
+  uz: {
+    map: { u: 'ö', k: 'q', x: 'h', g: 'ğ', ğ: 'g', o: 'ö', s: 'ş', c: 'ç' },
+    keep: ['tök', 'urin', 'olis', 'sahar', 'tort', 'bos', 'kupol', 'osdi', 'qis', 'isi'],
+  },
+  uzc: { map: { у: 'ў', к: 'қ', х: 'ҳ', г: 'ғ', ғ: 'г' }, keep: ['тўк', 'урин', 'купол'] },
+};
 // "papka@N" — shu bo'lak sanoqlari N ga ko'paytiriladi (kichik, lekin muhim korpusga og'irlik berish uchun)
 const dirs = [];
 {
@@ -127,6 +139,45 @@ for await (const [w, c] of mergeSum('uni.tsv.gz')) {
   if (c >= minUni) kept.push([w, c]);
 }
 kept.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+if (confusionRatio > 0 && CONFUSION[lang]) {
+  const { map, keep } = CONFUSION[lang];
+  const all = new Map(kept);
+  const keepSet = new Set(keep);
+  /** 1-2 harfi almashtirilgan shakllar. */
+  const variants = (w) => {
+    const pos = [];
+    for (let i = 0; i < w.length; i++) if (map[w[i]]) pos.push(i);
+    const res = [];
+    const sub = (s, i) => s.slice(0, i) + map[w[i]] + s.slice(i + 1);
+    for (let a = 0; a < pos.length; a++) {
+      const one = sub(w, pos[a]);
+      res.push(one);
+      for (let b = a + 1; b < pos.length; b++) res.push(sub(one, pos[b]));
+    }
+    return res;
+  };
+  const dropped = [];
+  // faqat lug'atga kirishi mumkin bo'lganlar tekshiriladi (ro'yxat boshidan, tushganlar o'rniga keyingilar keladi)
+  const out = [];
+  for (const e of kept) {
+    if (out.length >= maxVocab - 1) break;
+    const [w, c] = e;
+    if (w.length >= 3 && !keepSet.has(w)) {
+      let better = null;
+      for (const v of variants(w)) {
+        const cv = all.get(v);
+        if (cv !== undefined && cv >= confusionRatio * c && (!better || cv > better[1])) better = [v, cv];
+      }
+      if (better) {
+        dropped.push(`${w}>${better[0]}`);
+        continue;
+      }
+    }
+    out.push(e);
+  }
+  kept = out;
+  log(`xato shakllar (x${confusionRatio}): ${dropped.length} ta chiqarildi: ${dropped.slice(0, 30).join(' ')}`);
+}
 kept = kept.slice(0, maxVocab - 1);
 const countOf = new Map(kept);
 const vocab = [START, ...kept.map(([w]) => w)].sort();

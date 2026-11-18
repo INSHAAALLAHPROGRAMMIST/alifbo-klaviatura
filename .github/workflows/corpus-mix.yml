@@ -1,0 +1,158 @@
+name: corpus-mix
+
+# Vazirlik korpusi rasmiy matnga og'ir (kutubxona, arxiv, qonunlar), Telegram atigi ~1,6%. Shuning uchun
+# so'zlashuv iboralari ("xayrli tong", "nima gap") eski modeldagidan pastga tushdi. Bu workflow:
+#   1) extra: eski manbalarni (UzCrawl Telegram bloglari + UzBooks badiiy kitoblar) bitta qo'shimcha bo'lak
+#      qilib sanaydi;
+#   2) merge: corpus.yml ishining 34 bo'lagini (artefaktlardan, qayta sanamasdan) shu bo'lak bilan
+#      birlashtiradi; qo'shimcha bo'lak bir nechta og'irlikda (vaznlar) parallel sinaladi.
+# Natijalar solishtirilib, eng yaxshisi app/src/main/assets ga qo'shiladi.
+on:
+  workflow_dispatch:
+    inputs:
+      korpus_run:
+        description: "corpus.yml ishining raqami (counts-* artefaktlari shundan olinadi, 5 kun saqlanadi)"
+        default: "44375318849"
+      vaznlar:
+        description: "Qo'shimcha bo'lak og'irliklari (bo'sh joy bilan)"
+        default: "8 16 32"
+      tg_vazn:
+        description: "Qo'shimcha bo'lak ichida Telegram bloglari vazni"
+        default: "2"
+      kitob_vazn:
+        description: "Qo'shimcha bo'lak ichida badiiy kitoblar vazni"
+        default: "1"
+      norm:
+        description: "q shkalasi: sanoqlar shu so'zli korpusdek kichraytiriladi (ilova ballari ~1e8 ga sozlangan; 0 = yo'q)"
+        default: "100000000"
+      xato_nisbat:
+        description: "булган/bulgan kabi xato shakllarni chiqarish: to'g'ri shakl necha marta ko'p bo'lsa (0 = yo'q)"
+        default: "22"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      mults: ${{ steps.p.outputs.mults }}
+    steps:
+      - id: p
+        run: |
+          python3 - "${{ inputs.vaznlar }}" >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, sys
+          print("mults=" + json.dumps([str(int(x)) for x in sys.argv[1].split() if x.strip()]))
+          EOF
+
+  extra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Eski manbalar (UzCrawl Telegram + UzBooks badiiy)
+        env:
+          TG: ${{ inputs.tg_vazn }}
+          KITOB: ${{ inputs.kitob_vazn }}
+        run: |
+          pip install --quiet pyarrow
+          mkdir -p corpus
+          HF=https://huggingface.co/datasets/tahrirchi/uz-crawl/resolve/main/data
+          curl -L --fail --retry 5 --retry-delay 15 -sS -o corpus/tg.parquet "$HF/telegram_blogs-00000-of-00001.parquet"
+          python3 tools/parquet-to-text.py corpus/tg.parquet corpus/tg.txt
+          rm -f corpus/tg.parquet
+          BOOKS=https://huggingface.co/datasets/tahrirchi/uz-books/resolve/main/data
+          for i in 0 1 2 3; do
+            f=$(printf "lat-%05d-of-00028.parquet" "$i")
+            curl -L --fail --retry 5 --retry-delay 15 -sS -o corpus/book.parquet "$BOOKS/$f"
+            python3 tools/parquet-to-text.py corpus/book.parquet "corpus/book_$i.txt" --fiction
+            rm -f corpus/book.parquet
+          done
+          {
+            sed "s/^/${TG}\t/" corpus/tg.txt
+            cat corpus/book_*.txt tools/seed/uz.txt | sed "s/^/${KITOB}\t/"
+          } > corpus/extra.txt
+          wc -l corpus/*.txt
+          du -h corpus/*.txt
+
+      - name: Sanash
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+        run: |
+          for L in uz uzc; do
+            node tools/count-shard.mjs --lang "$L" --in corpus/extra.txt --out "extra/$L"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qoshimcha
+          path: extra/
+          retention-days: 5
+          compression-level: 0
+
+  merge:
+    needs: [plan, extra]
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        lang: [uz, uzc]
+        mult: ${{ fromJSON(needs.plan.outputs.mults) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: counts-*
+          path: counts
+          run-id: ${{ inputs.korpus_run }}
+          repository: ${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: qoshimcha
+          path: extra
+
+      - name: Birlashtirish
+        env:
+          NODE_OPTIONS: "--max-old-space-size=12288"
+          L: ${{ matrix.lang }}
+          M: ${{ matrix.mult }}
+          NORM: ${{ inputs.norm }}
+          XATO: ${{ inputs.xato_nisbat }}
+        run: |
+          echo "Bo'laklar: $(ls counts | wc -l) + qo'shimcha x$M"
+          mkdir -p models
+          node tools/merge-model.mjs --lang "$L" --in counts/*/"$L" "extra/$L@$M" --out "models/lm_$L.bin" \
+            --max-vocab 65000 --min-count 3 --min-bigram 2 --ctx-min 5 --norm "$NORM" --confusion-ratio "$XATO" \
+            --keep3 200000 --keep4 100000 --keep5 50000 | tee "models/stats_$L.txt"
+
+      - name: Tekshirish
+        env:
+          L: ${{ matrix.lang }}
+        run: |
+          node tools/query-model.mjs "models/lm_$L.bin" --check
+          if [ "$L" = uz ]; then
+            node tools/query-model.mjs models/lm_uz.bin --next xayrli --ctx "assalomu alaykum" --prefix yax
+          else
+            node tools/query-model.mjs models/lm_uzc.bin --next хайрли --ctx "ассалому алайкум" --prefix ях
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ matrix.lang }}-x${{ matrix.mult }}
+          path: models/
+          retention-days: 5
+          if-no-files-found: error

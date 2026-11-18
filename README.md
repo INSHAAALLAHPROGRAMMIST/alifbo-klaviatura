@@ -113,13 +113,25 @@ söz tugagaç keyingisini taklif qiladi. Hammasi oflayn:
   va 2–4 oldingi sözli kontekst jadvallari (uzunroq mos kelgan ibora ustun turadi; quyi tartib bilan
   bir xil natija beradigan kontekstlar saqlanmaydi).
   `tools/build-model.mjs` matn korpusidan yasaydi, `tools/query-model.mjs` mustaqil tekşiradi.
-  Özbek kirill modeli lotin matndan transliteratsiya orqali yasaladi (`tools/translit.mjs`).
-- Katta modellar GitHub Actions'da (`.github/workflows/models.yml`, qö'lda işga tuşiriladi) yasaladi:
-  özbek — [UzCrawl](https://huggingface.co/datasets/tahrirchi/uz-crawl) (Apache-2.0; Telegram bloglari +
-  `news-00002`) va [UzBooks](https://huggingface.co/datasets/tahrirchi/uz-books) (Apache-2.0; `lat` ning
-  birinçi 4 fayli, `--fiction` filtri bilan faqat badiiy kitoblar va şeirlar, ~64 mln söz),
-  inglizça va ruscha — [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR). Natija artefakt bölib
-  çiqadi, tekşirilgaç `app/src/main/assets/` ga qö'şiladi. `tools/seed/` — kiçik boşlang'ich matnlar.
+- Özbek (lotin va kirill) modellari Raqamli texnologiyalar vazirligining
+  [Özbek tili korpusi](https://huggingface.co/datasets/Digitaluz/uzbek-language-corpus) dan
+  (ODC-By 1.0; 5,6 mln hujjat, ~6 mlrd söz) yasalgan. Bitta server buni 6 soatda ulgurmaydi, şuning uçun
+  `.github/workflows/corpus.yml` 136 faylni 34 serverda parallel sanaydi (`tools/count-shard.mjs`),
+  `tools/merge-model.mjs` esa sanoqlarni birlaştirib model yozadi. Kirill modeli korpusning haqiqiy
+  kirill hujjatlaridan quriladi (quyidagi so'zlaşuv bölagi esa unga lotindan transliteratsiya qilinadi).
+- Korpus rasmiy matnga og'ir (kutubxona, arxiv, qonunlar; Telegram atigi ~1,6%), şuning uçun
+  `.github/workflows/corpus-mix.yml` unga so'zlaşuv manbalarini qöşadi:
+  [UzCrawl](https://huggingface.co/datasets/tahrirchi/uz-crawl) Telegram bloglari (Apache-2.0) va
+  [UzBooks](https://huggingface.co/datasets/tahrirchi/uz-books) badiiy kitoblari (Apache-2.0; `lat` ning
+  birinçi 4 fayli, `--fiction` filtri). Bu bölak ×32 og'irlik oladi (8, 16, 32 sinalgan;
+  "xayrli tong", "tuğilgan kun" kabi iboralar 32 da eng yaxşi). Sanoqlar yozişdan oldin ~1e8 sözli
+  korpus şkalasiga keltiriladi (`--norm`): ilovadagi ball qoidalari şunga sozlangan.
+  Özbekça harflarsiz yozilgan xato şakllar lug'atdan çiqariladi (`--confusion-ratio 22`): kirill
+  klaviaturasidan (`булган`, `kup`, `xozir`) va apostrofsiz lotindan (`bolgan`, `togri`). Aks holda ilova
+  ularni ma'lum söz deb tuzatmasdi yoki "bulgan" ni "bölgan" emas, "bulğan" qilardi.
+- Inglizça va ruscha modellar — [Tatoeba](https://tatoeba.org) (CC BY 2.0 FR),
+  `.github/workflows/models.yml`. Hamma modellar artefakt bölib çiqadi, tekşirilgaç
+  `app/src/main/assets/` ga qö'şiladi. `tools/seed/` — kiçik boşlang'ich matnlar.
 - Eski yozuvdan yordam (sozlamada öçiriladi): yangi alifboga könikkunça `s` yozilsa `ş` bilan
   boşlanadigan sözlar ham taklif qilinadi (`o → ö`, `g → ğ`), eski odatdagi `sh`, `oʼ`, `gʼ` esa
   `ş`, `ö`, `ğ` deb tuşuniladi. Almaştirilgan har harf uçun kiçik jarima bor.

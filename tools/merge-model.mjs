@@ -4,6 +4,7 @@
 // xotiraga faqat lug'at va saqlanadigan kontekstlar sig'ishi kerak.
 //
 //   node tools/merge-model.mjs --lang uz --in counts/*/uz --out lm_uz.bin
+//   node tools/merge-model.mjs --lang uz --in counts/*/uz extra/uz@16 --out lm_uz.bin   # extra x16 og'irlik
 //
 // --max-vocab 65000 --min-count 3 --min-bigram 2 --ctx-min 5 --k-high 4 --max-order 5
 // --keep3 200000 --keep4 100000 --keep5 50000
@@ -27,10 +28,16 @@ const ctxMin = Number(opt('ctx-min', '5'));
 const kHigh = Number(opt('k-high', '4'));
 const maxOrder = Math.min(5, Math.max(2, Number(opt('max-order', '5'))));
 const keepCap = { 3: Number(opt('keep3', '200000')), 4: Number(opt('keep4', '100000')), 5: Number(opt('keep5', '50000')) };
+// "papka@N" — shu bo'lak sanoqlari N ga ko'paytiriladi (kichik, lekin muhim korpusga og'irlik berish uchun)
 const dirs = [];
 {
   const i = args.indexOf('--in');
-  if (i >= 0) for (let j = i + 1; j < args.length && !args[j].startsWith('--'); j++) dirs.push(args[j]);
+  if (i >= 0) {
+    for (let j = i + 1; j < args.length && !args[j].startsWith('--'); j++) {
+      const m = /^(.*)@(\d+(?:\.\d+)?)$/.exec(args[j]);
+      dirs.push(m ? { dir: m[1], mult: Number(m[2]) } : { dir: args[j], mult: 1 });
+    }
+  }
 }
 if (!LANGS.includes(lang) || !out || dirs.length === 0) {
   console.error('Foydalanish: node tools/merge-model.mjs --lang uz|uzc|en|ru --in papka... --out chiqish.bin');
@@ -40,19 +47,19 @@ if (!LANGS.includes(lang) || !out || dirs.length === 0) {
 const t0 = Date.now();
 const log = (msg) => console.error(`${lang}: ${msg} (${Math.round((Date.now() - t0) / 1000)} s)`);
 
-/** Bitta saralangan gzip fayldan [kalit, son]. */
-async function* readGz(file) {
+/** Bitta saralangan gzip fayldan [kalit, son * mult]. */
+async function* readGz(file, mult) {
   const rl = readline.createInterface({ input: fs.createReadStream(file).pipe(zlib.createGunzip()), crlfDelay: Infinity });
   for await (const line of rl) {
     const i = line.lastIndexOf('\t');
-    if (i > 0) yield [line.slice(0, i), Number(line.slice(i + 1))];
+    if (i > 0) yield [line.slice(0, i), Number(line.slice(i + 1)) * mult];
   }
 }
 
 /** Barcha bo'laklardagi bir xil kalitlarni qo'shib, kalit tartibida beradi. */
 async function* mergeSum(name) {
-  const files = dirs.map((d) => path.join(d, name)).filter((f) => fs.existsSync(f));
-  const its = files.map((f) => readGz(f)[Symbol.asyncIterator]());
+  const files = dirs.map((d) => ({ f: path.join(d.dir, name), mult: d.mult })).filter((x) => fs.existsSync(x.f));
+  const its = files.map((x) => readGz(x.f, x.mult)[Symbol.asyncIterator]());
   // kichik uyum (heap): [kalit, son, manba]
   const heap = [];
   const less = (x, y) => x[0] < y[0];

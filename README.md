@@ -126,6 +126,20 @@ ustunlikda, keyin oddiy xatolar (bitta harf tuşgan, ortiqça, almaşgan yoki ö
 Avtomatik tuzatiş yoniq bölsa, probel yoki tinish belgisi bosilganda söz almaştiriladi
 (tuzatiş urğu rangida körsatiladi); darhol orqaga öçiriş — asl söz qaytadi va endi tuzatilmaydi.
 
+## Tiniş, probel va katta harf
+
+- Söz ortidan `. , ! ? ; : …` qöyilsa, probel özi qöyiladi; ortidan yana probel bosilsa, ikkinçisi
+  qöşilmaydi. Raqamlarda (`3.14`, `1,5`, `10:30`), email va havolalarda, `h.k.` kabi qisqartmalarda
+  probel qöyilmaydi.
+- Tinişdan keyin yana tiniş yoki yopuvçi belgi bosilsa, probel uning ortiga ötadi: `Nima?!`, `Hmm...`,
+  `«Salom.»`. Söz ortidan probel bosilib, darhol `. , ! ?` bosilsa, belgi probel oldiga köçadi
+  (`söz ,` → `söz, `); taklif tanlangaçdagi probel ham şunday.
+- Probel tez ikki marta bosilsa — nuqta va probel. Enter bosilsa, oxirdagi avtomatik probel olinadi.
+- Gap tugagaç (`. ! ?` va probel), yangi qatorda va maydon boşida birinçi harf katta. Ilova bu bayroqni
+  (`CAP_SENTENCES`) unutgan köp qatorli maydonlarda ham; bir qatorli bayroqsiz maydonlarda (login, qidiruv) kiçik.
+- Belgilar sahifasida (`?123`) belgi yozilib, probel yoki Enter bosilsa — harflarga qaytiladi.
+- Hammasi sozlamalarning «Yoziş» bölimida öçiriladi. Mantiq `Spacing.kt` da, testlari `SpacingTest.kt` da.
+
 ## Xavfsizlik
 
 - `AndroidManifest.xml`'da **heç qanday** `uses-permission` yöq (INTERNET ham). Tayyor APK'da faqat
@@ -190,4 +204,4 @@ imzolangan APK yig'adi va artefakt sifatida beradi. Imzo kaliti repoda emas, Git
 
 1. Asos: 4 maket, belgilar, emoji, tema, sozlamalar ✔ (shu versiya)
 2. Tahmin: oflayn lug'at, keyingi söz, shaxsiy örganiş (faqat qurilmada)
-3. Sayqal: so'z tuzatish, qö'sh probel → nuqta, vaqtinçalik buferlar
+3. Sayqal: so'z tuzatish ✔, qö'sh probel → nuqta ✔, tinişdan keyin probel ✔, vaqtinçalik buferlar ✔

@@ -114,6 +114,21 @@ class Prefs(private val context: Context) {
         get() = bool("autoCorrect", true)
         set(v) = putBool("autoCorrect", v)
 
+    /** Gap boshida (maydon boshi, yangi qator, ". ! ?" dan keyin) avtomatik bosh harf. */
+    var autoCap: Boolean
+        get() = bool("autoCap", true)
+        set(v) = putBool("autoCap", v)
+
+    /** So'zdan keyin . , ! ? ; : qo'yilsa, ortidan probel o'zi qo'yiladi. */
+    var autoSpace: Boolean
+        get() = bool("autoSpace", true)
+        set(v) = putBool("autoSpace", v)
+
+    /** Probel tez ikki marta bosilsa — nuqta va probel. */
+    var doubleSpacePeriod: Boolean
+        get() = bool("dblSpace", true)
+        set(v) = putBool("dblSpace", v)
+
     /** O'rganilganlarni o'chirganda oshiriladi: klaviatura xotiradagi nusxani tashlab yuboradi. */
     var personalEpoch: Int
         get() = int("personalEpoch", 0)

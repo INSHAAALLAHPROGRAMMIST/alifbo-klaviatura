@@ -138,6 +138,7 @@ Avtomatik tuzatiş yoniq bölsa, probel yoki tinish belgisi bosilganda söz alma
 - Gap tugagaç (`. ! ?` va probel), yangi qatorda va maydon boşida birinçi harf katta. Ilova bu bayroqni
   (`CAP_SENTENCES`) unutgan köp qatorli maydonlarda ham; bir qatorli bayroqsiz maydonlarda (login, qidiruv) kiçik.
 - Belgilar sahifasida (`?123`) belgi yozilib, probel yoki Enter bosilsa — harflarga qaytiladi.
+- Inglizçada yolğiz `i` (va `i'm`, `i'll`, `i've`, `i'd`) avtomatik tuzatişda `I` bölib qöyiladi.
 - Hammasi sozlamalarning «Yoziş» bölimida öçiriladi. Mantiq `Spacing.kt` da, testlari `SpacingTest.kt` da.
 
 ## Xavfsizlik

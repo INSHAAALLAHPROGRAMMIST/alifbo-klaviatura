@@ -212,6 +212,18 @@ class SpacingTest {
     }
 
     @Test
+    fun inglizchaI() {
+        assertEquals("I", Punct.englishI("i"))
+        assertEquals("I'm", Punct.englishI("i'm"))
+        assertEquals("I’ll", Punct.englishI("i’ll"))
+        assertEquals("I've", Punct.englishI("i've"))
+        assertEquals(null, Punct.englishI("I"))
+        assertEquals(null, Punct.englishI("it"))
+        assertEquals(null, Punct.englishI("is"))
+        assertEquals(null, Punct.englishI("i'x"))
+    }
+
+    @Test
     fun maydonTurlari() {
         val text = InputType.TYPE_CLASS_TEXT
         assertEquals(Punct.CAP_SENTENCES, Punct.capMode(text or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES))

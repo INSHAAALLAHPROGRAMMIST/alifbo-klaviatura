@@ -89,6 +89,16 @@ object Punct {
         return true
     }
 
+    /** Inglizcha "i", "i'm", "i'll", "i've", "i'd" — doim bosh harf bilan; boshqa so'zlar uchun null. */
+    fun englishI(word: String): String? {
+        if (word.isEmpty() || word[0] != 'i') return null
+        if (word == "i") return "I"
+        if (word.length < 3 || word[1] !in "'’ʼ") return null
+        return if (word.substring(2) in I_SUFFIXES) "I" + word.substring(1) else null
+    }
+
+    private val I_SUFFIXES = setOf("m", "ll", "ve", "d")
+
     private fun sensitive(inputType: Int): Boolean {
         val v = inputType and InputType.TYPE_MASK_VARIATION
         return v == InputType.TYPE_TEXT_VARIATION_PASSWORD ||

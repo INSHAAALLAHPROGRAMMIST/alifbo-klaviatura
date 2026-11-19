@@ -565,13 +565,17 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
             val before = ic.getTextBeforeCursor(80, 0) ?: return null
             val ctx = ContextParser.parse(before)
             val raw = ctx.prefix
-            if (raw.length < 2) return null
+            // inglizcha "i", "i'm" — doim "I", "I'm"
+            val pronoun = if (langs[langIdx] == Lang.EN) Punct.englishI(raw) else null
+            if (pronoun == null && raw.length < 2) return null
             if (raw == suppressAutoFor) {
                 suppressAutoFor = null
                 return null
             }
-            val fixed = suggesterFor(langs[langIdx]).autoCorrect(ctx, fuzzyOn) ?: return null
-            val cased = Suggester.caseLike(fixed, raw)
+            val cased = pronoun ?: run {
+                val fixed = suggesterFor(langs[langIdx]).autoCorrect(ctx, fuzzyOn) ?: return null
+                Suggester.caseLike(fixed, raw)
+            }
             if (cased == raw) return null
             ic.beginBatchEdit()
             ic.deleteSurroundingText(raw.length, 0)

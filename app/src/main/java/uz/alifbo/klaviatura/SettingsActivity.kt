@@ -87,6 +87,7 @@ class SettingsActivity : Activity() {
         buildThemeCard()
         buildSizeCard()
         buildOptionsCard()
+        buildTypingCard()
         buildPredictCard()
         buildClipboardCard()
         buildTranslateCard()
@@ -244,10 +245,26 @@ class SettingsActivity : Activity() {
         switchRow(c, "Tugmalarda raqam körsatkiçi", prefs.showHints) { prefs.showHints = it }
     }
 
+    private fun buildTypingCard() {
+        val c = card("Yoziş")
+        switchRow(c, "Gap boşida katta harf", prefs.autoCap) { prefs.autoCap = it }
+        switchRow(c, "Tinişdan keyin probel", prefs.autoSpace) { prefs.autoSpace = it }
+        switchRow(c, "Ikki probel — nuqta", prefs.doubleSpacePeriod) { prefs.doubleSpacePeriod = it }
+        c.addView(
+            label(
+                "Söz ortidan . , ! ? ; : qöyilsa, probel özi qöyiladi; yana probel bossangiz, ikkinçisi qöşilmaydi. " +
+                    "Raqamlarda (3.14, 1,5, 10:30), havola va emaillarda probel qöyilmaydi. " +
+                    "Gap tugagaç (. ! ? dan keyin), yangi qatorda va maydon boşida birinçi harf katta bölib çiqadi. " +
+                    "Probelni tez ikki marta bossangiz — nuqta va probel.",
+                12f, muted,
+            ),
+        )
+    }
+
     private fun buildPredictCard() {
         val c = card("Söz tahmini")
         switchRow(c, "Tahmin qatori", prefs.predict) { prefs.predict = it }
-        switchRow(c, "Shaxsiy örganiş", prefs.learn) { prefs.learn = it }
+        switchRow(c, "Şaxsiy örganiş", prefs.learn) { prefs.learn = it }
         switchRow(c, "Avtomatik tuzatiş", prefs.autoCorrect) { prefs.autoCorrect = it }
         c.addView(
             label(

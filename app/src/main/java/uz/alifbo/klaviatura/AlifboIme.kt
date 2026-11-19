@@ -35,13 +35,23 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
     /** Qatordagi takliflar bosilganda qo'yiladigan matn (ko'rinishi qo'shtirnoqli bo'lishi mumkin). */
     private var stripCommit: List<String> = emptyList()
 
-    /** Oxirgi avtomatik tuzatish: (asl so'z, qo'yilgan matn probel/belgi bilan). */
-    private var lastAutoCorrect: Pair<String, String>? = null
+    /** Oxirgi avtomatik tuzatish: asl so'z, qo'yilgan so'z va ortidan qo'yilgan probel/belgi. */
+    private class AutoFix(val original: String, val fixed: String, val sep: String)
+
+    private var lastAutoCorrect: AutoFix? = null
 
     /** Foydalanuvchi qaytargan so'z: keyingi probelda qayta tuzatilmaydi. */
     private var suppressAutoFor: String? = null
-    private var justAccepted = false
     private var knownEpoch = 0
+
+    // tinish belgilari atrofidagi probel va gap boshidagi bosh harf
+    private val spacing = Spacing()
+    private var autoCapOn = true
+    private var proseField = false
+    private var selActive = false
+
+    /** Belgilar sahifasida belgi yozildi: probel/Enter'dan keyin harflarga qaytiladi. */
+    private var symTyped = false
     private val models = java.util.concurrent.ConcurrentHashMap<String, LanguageModel>()
     private val personals = HashMap<String, PersonalModel>()
     private val suggesters = HashMap<String, Suggester>()
@@ -251,7 +261,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         ) Page.SYM1 else Page.LETTERS
         enter = enterStyleFor(info)
         shift = Shift.OFF
-        justAccepted = false
+        configureSpacing(info)
         if (!restarting) typedThisSession = false
         clipboardOn = prefs.clipboardHistory && !isSensitiveField(info)
         configurePrediction(info)
@@ -311,6 +321,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        selActive = newSelStart != newSelEnd
         refreshSuggestions()
     }
 
@@ -370,13 +381,28 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         root?.keyboard?.shift = s
     }
 
+    /**
+     * Gap boshida (maydon boshi, yangi qator, ". ! ?" va probeldan keyin) bosh harf. Gap boshini o'zimiz
+     * aniqlaymiz: ilovaning getCursorCapsMode javobi ba'zi maydonlarda (bayroq unutilgan ko'p qatorli
+     * maydonlar) doim 0 bo'ladi.
+     */
     private fun updateAutoCap() {
-        if (page != Page.LETTERS || shift == Shift.CAPS) return
+        if (page != Page.LETTERS || shift == Shift.CAPS || !autoCapOn) return
         val info = currentInputEditorInfo ?: return
         val ic = currentInputConnection ?: return
-        if (info.inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return
-        val caps = ic.getCursorCapsMode(info.inputType)
-        val want = if (caps != 0) Shift.ONCE else Shift.OFF
+        val caps = try {
+            when (Punct.capMode(info.inputType)) {
+                Punct.CAP_SENTENCES -> {
+                    val before = ic.getTextBeforeCursor(CAP_LOOKBACK, 0)
+                    if (before == null) ic.getCursorCapsMode(info.inputType) != 0 else Punct.isSentenceStart(before)
+                }
+                Punct.CAP_SYSTEM -> ic.getCursorCapsMode(info.inputType) != 0
+                else -> false
+            }
+        } catch (t: Throwable) {
+            false
+        }
+        val want = if (caps) Shift.ONCE else Shift.OFF
         if (shift != want) setShift(want)
     }
 
@@ -385,6 +411,52 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         updateAutoCap()
         refreshSuggestions()
     }
+
+    // ---------------------------------------------------------------- tinish va probel
+
+    private class IcField(private val ic: InputConnection) : Spacing.Field {
+        override fun before(n: Int): CharSequence? = try {
+            ic.getTextBeforeCursor(n, 0)
+        } catch (t: Throwable) {
+            null
+        }
+
+        override fun after(n: Int): CharSequence? = try {
+            ic.getTextAfterCursor(n, 0)
+        } catch (t: Throwable) {
+            null
+        }
+
+        override fun delete(n: Int) {
+            ic.deleteSurroundingText(n, 0)
+        }
+
+        override fun commit(text: String) {
+            ic.commitText(text, 1)
+        }
+    }
+
+    private fun configureSpacing(info: EditorInfo) {
+        spacing.reset()
+        spacing.autoSpace = prefs.autoSpace
+        spacing.doublePeriod = prefs.doubleSpacePeriod
+        autoCapOn = prefs.autoCap
+        proseField = Punct.isProse(info.inputType)
+        selActive = info.initialSelStart >= 0 && info.initialSelStart != info.initialSelEnd
+        symTyped = false
+    }
+
+    /** Belgilar sahifasida belgi yozilib, probel/Enter bosilsa — harflarga qaytamiz (Gboard'dagidek). */
+    private fun leaveSymbols() {
+        if (page == Page.LETTERS || !symTyped) return
+        val info = currentInputEditorInfo ?: return
+        if (info.inputType and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return
+        symTyped = false
+        page = Page.LETTERS
+        applyLayout()
+    }
+
+    private fun isPunct(c: Char): Boolean = c in Punct.SPACE_AFTER || c in Punct.CLOSERS || c == '"'
 
     // ---------------------------------------------------------------- tahmin
 
@@ -511,18 +583,26 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         }
     }
 
-    /** Avtomatik tuzatishdan keyin darhol orqaga o'chirish bosilsa: asl so'zni qaytaradi. */
+    /**
+     * Avtomatik tuzatishdan keyin darhol orqaga o'chirish bosilsa: asl so'zni qaytaradi. Probelda tuzatilgan
+     * bo'lsa — so'zning o'zi (keyingi probelda qayta tuzatilmaydi); tinish belgisida — belgi va probel saqlanadi.
+     */
     private fun undoAutoCorrect(ic: InputConnection): Boolean {
         val last = lastAutoCorrect ?: return false
         lastAutoCorrect = null
-        val (original, inserted) = last
+        val inserted = last.fixed + last.sep
         val before = ic.getTextBeforeCursor(inserted.length, 0)?.toString() ?: return false
         if (before != inserted) return false
+        val restore = if (last.sep == " ") last.original else last.original + last.sep
         ic.beginBatchEdit()
         ic.deleteSurroundingText(inserted.length, 0)
-        ic.commitText(original, 1)
+        ic.commitText(restore, 1)
         ic.endBatchEdit()
-        suppressAutoFor = original
+        if (last.sep == " ") {
+            suppressAutoFor = last.original
+        } else if (restore.endsWith(' ')) {
+            spacing.afterRestore(IcField(ic))
+        }
         return true
     }
 
@@ -538,11 +618,12 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
             if (ctx.prefix.isNotEmpty()) ic.deleteSurroundingText(ctx.prefix.length, 0)
             ic.commitText("$word ", 1)
             ic.endBatchEdit()
+            // taklif ortidagi probel: keyin probel bosilsa ikkinchisi qo'shilmaydi, tinish belgisi oldiga o'tadi
+            spacing.afterPick(IcField(ic))
             learnWord(ctx.history, word)
         } catch (t: Throwable) {
             return
         }
-        justAccepted = true
         afterInput()
     }
 
@@ -586,15 +667,24 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
-        val boundary = text.isNotEmpty() && !ContextParser.isWordChar(text[0])
-        val corrected = if (boundary && text.length == 1 && text[0] in ",.!?;:") maybeAutoCorrect(ic) else null
-        if (boundary) learnFromCursor(ic)
-        if (justAccepted && text.length == 1 && text[0] in ",.!?;:") {
-            if (ic.getTextBeforeCursor(1, 0)?.toString() == " ") ic.deleteSurroundingText(1, 0)
+        if (page != Page.LETTERS) symTyped = true
+        val p = text.singleOrNull()
+        if (p == null || !isPunct(p) || selActive) {
+            spacing.reset()
+            if (text.isNotEmpty() && !ContextParser.isWordChar(text[0])) learnFromCursor(ic)
+            ic.commitText(text, 1)
+            afterInput()
+            return
         }
-        justAccepted = false
-        ic.commitText(text, 1)
-        if (corrected != null) lastAutoCorrect = corrected.first to corrected.second + text
+        val f = IcField(ic)
+        // "so'z ." → "so'z. ", "Nima? !" → "Nima?! ": oldidagi probel belgining ortiga o'tadi.
+        // (batch edit ataylab yo'q: ba'zi maydonlar — masalan Chrome — batch ichida o'qishga eski matnni beradi)
+        val moved = spacing.beforePunct(f, p)
+        val corrected = if (moved == Spacing.MOVED_NONE && p in Punct.SPACE_AFTER) maybeAutoCorrect(ic) else null
+        if (moved == Spacing.MOVED_NONE) learnFromCursor(ic)
+        val committed = spacing.commitPunct(f, p, proseField, moved)
+        if (corrected != null) lastAutoCorrect = AutoFix(corrected.first, corrected.second, committed)
+        if (committed.endsWith(' ')) leaveSymbols()
         afterInput()
     }
 
@@ -602,18 +692,25 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
-        val corrected = maybeAutoCorrect(ic)
-        learnFromCursor(ic)
-        justAccepted = false
-        ic.commitText(" ", 1)
-        if (corrected != null) lastAutoCorrect = corrected.first to corrected.second + " "
+        val f = IcField(ic)
+        val now = SystemClock.uptimeMillis()
+        // avtomatik qo'yilgan probeldan keyin probel — ikkinchisi qo'shilmaydi; tez ikki probel — ". "
+        val res = if (selActive) Spacing.SpaceResult.NORMAL else spacing.onSpace(f, now)
+        if (res == Spacing.SpaceResult.NORMAL) {
+            val corrected = maybeAutoCorrect(ic)
+            learnFromCursor(ic)
+            ic.commitText(" ", 1)
+            spacing.afterSpace(f, now)
+            if (corrected != null) lastAutoCorrect = AutoFix(corrected.first, corrected.second, " ")
+        }
+        leaveSymbols()
         afterInput()
     }
 
     override fun onDelete() {
         val ic = currentInputConnection ?: return
         typedThisSession = true
-        justAccepted = false
+        spacing.reset()
         if (undoAutoCorrect(ic)) {
             updateAutoCap()
             refreshSuggestions()
@@ -631,9 +728,12 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
         val ic = currentInputConnection ?: return
         lastAutoCorrect = null
         typedThisSession = true
-        maybeAutoCorrect(ic)
-        learnFromCursor(ic)
-        justAccepted = false
+        // oxirdagi avtomatik probel ("Rahmat. ") yuborishdan/yangi qatordan oldin olinadi
+        if (!spacing.beforeEnter(IcField(ic))) {
+            maybeAutoCorrect(ic)
+            learnFromCursor(ic)
+        }
+        leaveSymbols()
         val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
         val noAction = info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
         if (!noAction && action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
@@ -666,6 +766,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
 
     override fun onPage(page: Page) {
         this.page = page
+        symTyped = false
         applyLayout()
         if (page == Page.LETTERS) updateAutoCap()
         refreshSuggestions()
@@ -705,5 +806,8 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler {
 
         /** Shu vaqt ichida nusxalangan matn yozish boshida taklif qilinadi. */
         const val CLIP_FRESH_MS = 15 * 60 * 1000L
+
+        /** Gap boshini aniqlash uchun kursordan oldingi shuncha belgi o'qiladi. */
+        const val CAP_LOOKBACK = 80
     }
 }

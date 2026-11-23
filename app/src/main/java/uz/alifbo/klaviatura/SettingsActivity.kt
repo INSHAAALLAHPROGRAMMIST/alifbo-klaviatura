@@ -45,6 +45,9 @@ class SettingsActivity : Activity() {
     private lateinit var keyStatus: TextView
     private lateinit var keyHelp: TextView
     private lateinit var keyInput: EditText
+    private lateinit var regionInput: EditText
+    private lateinit var saveKeyButton: TextView
+    private val engineButtons = ArrayList<TextView>()
     private lateinit var testResult: TextView
     private lateinit var vaultStatus: TextView
     private var pendingExport: ByteArray? = null
@@ -106,7 +109,7 @@ class SettingsActivity : Activity() {
 
         val foot = label(
             "Söz+ internetga faqat tarjima uçun va faqat siz ➤ bosganda çiqadi (to'g'ridan-to'g'ri, " +
-                "Tor'siz — Google xizmatga söroq manzilingizni körishi mumkin). Yozganlaringiz, örganilgan " +
+                "Tor'siz — tarjima xizmati söroq manzilingizni körishi mumkin). Yozganlaringiz, örganilgan " +
                 "sözlar, bufer va parollar faqat telefoningizda qoladi.",
             12f, muted,
         )
@@ -365,18 +368,32 @@ class SettingsActivity : Activity() {
             label(
                 "Tahmin qatoridagi «A文» tugmasi klaviatura içida tarjima qatorini oçadi: yozasiz, ➤ bosasiz, " +
                     "tarjimani körib «Qöyiş» bilan maydonga qöyasiz. 📋 — buferdagi matnni (masalan, kelgan xabarni) " +
-                    "tarjima qiliş. Matn faqat siz ➤ bosganingizda, Google Cloud Translation xizmatiga " +
-                    "to'g'ridan-to'g'ri ketadi (Tor'siz — xizmat söroq manzilingizni körishi mumkin). Parol " +
+                    "tarjima qiliş. Matn faqat siz ➤ bosganingizda, tanlangan xizmatga to'g'ridan-to'g'ri " +
+                    "ketadi (Tor'siz — xizmat söroq manzilingizni körishi mumkin). Parol " +
                     "maydonlarida tarjima öçiq; parollar ombori tarmoqqa heç qaçon çiqmaydi.",
                 12f, muted,
             ),
         )
 
-        c.addView(label("Tarjima kaliti", 15f, ink), lp().apply { topMargin = dpi(14) })
+        c.addView(label("Tarjima xizmati", 15f, ink), lp().apply { topMargin = dpi(14) })
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val names = listOf("Standart", "Google", "Azure")
+        names.forEachIndexed { i, name ->
+            val b = chip(name) {
+                prefs.trEngine = ENGINE_MODES[i]
+                keyInput.setText("")
+                refreshTranslateCard()
+            }
+            engineButtons.add(b)
+            row.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                if (i < names.size - 1) marginEnd = dpi(6)
+            })
+        }
+        c.addView(row, lp().apply { topMargin = dpi(6) })
         keyStatus = label("", 13f, muted)
         c.addView(keyStatus, lp().apply { topMargin = dpi(8) })
         keyInput = EditText(this).apply {
-            hint = "API kaliti (bösh qoldirsangiz, standart kalit işlatiladi)"
+            hint = "API kaliti"
             setHintTextColor(muted)
             setTextColor(ink)
             textSize = 15f
@@ -385,7 +402,18 @@ class SettingsActivity : Activity() {
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
         c.addView(keyInput)
-        c.addView(pill("Kalitni saqlaş") { saveTranslateKey() }, lp().apply { topMargin = dpi(8) })
+        regionInput = EditText(this).apply {
+            hint = "Azure mintaqasi (masalan: westeurope)"
+            setHintTextColor(muted)
+            setTextColor(ink)
+            textSize = 15f
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setText(prefs.azureRegion)
+        }
+        c.addView(regionInput)
+        saveKeyButton = pill("Kalitni saqlaş") { saveTranslateKey() }
+        c.addView(saveKeyButton, lp().apply { topMargin = dpi(8) })
         keyHelp = label("", 12f, muted)
         c.addView(keyHelp, lp().apply { topMargin = dpi(8) })
 
@@ -398,31 +426,55 @@ class SettingsActivity : Activity() {
 
     private fun refreshTranslateCard() {
         if (!::keyStatus.isInitialized) return
-        val has = Secrets.has(this, Translator.KEY_NAME)
-        val usingDefault = Secrets.usingDefault(this, Translator.KEY_NAME)
+        val mode = prefs.trEngine
+        engineButtons.forEachIndexed { i, b -> styleChip(b, ENGINE_MODES[i] == mode) }
+        val own = mode != Translator.DEFAULT
+        keyInput.visibility = if (own) View.VISIBLE else View.GONE
+        saveKeyButton.visibility = if (own) View.VISIBLE else View.GONE
+        regionInput.visibility = if (mode == Translator.AZURE) View.VISIBLE else View.GONE
+        val has = own && Secrets.has(this, Translator.keyName(mode))
+        val hasDefault = Secrets.defaultKey() != null
+        val ok = if (own) has else hasDefault
         keyStatus.text = when {
-            has -> "✓ O'zingizning kalitingiz saqlangan (şifrlangan). Yangisini kiritsangiz, almaşadi."
-            usingDefault -> "✓ Ilovaga qotirilgan standart kalit işlatilmoqda. Xohlasangiz, özingiznikini kiriting."
-            else -> "Kalit hali yöq"
+            mode == Translator.DEFAULT && hasDefault -> "✓ Söz+ ning standart kaliti işlatiladi (Google Cloud Translation) — heç narsa kiritişingiz shart emas."
+            mode == Translator.DEFAULT -> "Bu yig'işda standart kalit yöq. «Google» yoki «Azure» ni tanlab, özingiznikini kiriting."
+            has -> "✓ Kalit saqlangan (şifrlangan). Yangisini kiritsangiz, almaşadi; bös saqlasangiz, öçadi."
+            else -> "Kalit hali kiritilmagan"
         }
-        keyStatus.setTextColor(if (has || usingDefault) accent else muted)
-        keyHelp.text = "Özingizning kalitingiz: console.cloud.google.com → «Cloud Translation API» ni " +
-            "yoqing → «Credentials» → «Create API key». Oyiga 500 ming belgigaça bepul, hisobda karta " +
-            "(billing) bölişi kerak. Xavfsizlik uçun kalitni faqat «Cloud Translation API» bilan çeklang."
+        keyStatus.setTextColor(if (ok) accent else muted)
+        keyHelp.text = when (mode) {
+            Translator.AZURE ->
+                "Azure Translator: portal.azure.com → «Translator» resursi (F0 — oyiga 2 mln belgigaça bepul) → " +
+                    "«Keys and Endpoint» bölimidagi KEY 1 va Location/Region. Hisob oçişda karta söraladi."
+            Translator.GOOGLE ->
+                "Google Cloud: console.cloud.google.com → «Cloud Translation API» ni yoqing → «Credentials» → " +
+                    "«Create API key». Oyiga 500 ming belgigaça bepul, hisobda karta (billing) bölişi kerak. " +
+                    "Xavfsizlik uçun kalitni faqat «Cloud Translation API» bilan çeklang."
+            else -> "Standart kalit tarjima uçun ajratilgan umumiy kvotadan işlaydi. Tugab qolsa yoki " +
+                "özingizning xizmatingizni xohlasangiz, «Google» yoki «Azure» ni tanlab, özingiznikini kiriting."
+        }
     }
 
     private fun saveTranslateKey() {
+        val mode = prefs.trEngine
+        if (mode == Translator.DEFAULT) return
+        val name = Translator.keyName(mode)
         val key = keyInput.text.toString().trim()
+        if (mode == Translator.AZURE) prefs.azureRegion = regionInput.text.toString().trim()
         if (key.isEmpty()) {
-            if (!Secrets.put(this, Translator.KEY_NAME, null)) {
-                Toast.makeText(this, "Kalit öçirilmadi", Toast.LENGTH_SHORT).show()
-                return
+            if (Secrets.has(this, name)) {
+                if (!Secrets.put(this, name, null)) {
+                    Toast.makeText(this, "Kalit öçirilmadi", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                Toast.makeText(this, "Kalit öçirildi", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, if (mode == Translator.AZURE) "Mintaqa saqlandi" else "Kalit bös", Toast.LENGTH_SHORT).show()
             }
-            Toast.makeText(this, "O'z kalitingiz öçirildi, standart kalit işlatiladi", Toast.LENGTH_SHORT).show()
             refreshTranslateCard()
             return
         }
-        if (!Secrets.put(this, Translator.KEY_NAME, key)) {
+        if (!Secrets.put(this, name, key)) {
             Toast.makeText(this, "Kalit saqlanmadi", Toast.LENGTH_SHORT).show()
             return
         }
@@ -450,16 +502,18 @@ class SettingsActivity : Activity() {
     }
 
     private fun testTranslate() {
-        val key = Secrets.get(this, Translator.KEY_NAME)
+        val mode = prefs.trEngine
+        val key = Translator.keyFor(this, mode)
         if (key.isNullOrBlank()) {
-            testResult.text = "Avval kalitni kiriting va saqlang"
+            testResult.text = if (mode == Translator.DEFAULT) "Bu yig'işda standart kalit yöq" else "Avval kalitni kiriting va saqlang"
             return
         }
+        val region = prefs.azureRegion
         testResult.text = "Yuborilmoqda…"
         Thread {
             val msg = try {
                 val src = UzScript.newToOld("Salom, dunyo! Bugun havo juda yaxşi.")
-                "✓ " + Translator.translate(key, src, "uz", "en")
+                "✓ " + Translator.translate(mode, key, region, src, "uz", "en")
             } catch (e: Translator.Failure) {
                 "✗ " + e.userMessage
             } catch (e: Exception) {
@@ -676,7 +730,7 @@ class SettingsActivity : Activity() {
                     "• UzBooks — tahrirchi (Apache-2.0): özbekça badiiy kitoblar (faqat söz statistikasi)\n" +
                     "• Tatoeba — tatoeba.org (CC BY 2.0 FR): inglizça va ruscha gaplar\n" +
                     "Emoji paneli: AndroidX Emoji2 (Apache-2.0).\n" +
-                    "Tarjima: Google Cloud Translation (to'g'ridan-to'g'ri).",
+                    "Tarjima: Google Cloud Translation yoki Microsoft Azure Translator (to'g'ridan-to'g'ri).",
                 13f, ink,
             ),
         )
@@ -882,6 +936,9 @@ class SettingsActivity : Activity() {
     }
 
     private companion object {
+        /** «Standart / Google / Azure» tugmalariga mos Translator rejimlari. */
+        val ENGINE_MODES = listOf(Translator.DEFAULT, Translator.GOOGLE, Translator.AZURE)
+
         const val REQ_EXPORT = 61
         const val REQ_IMPORT = 62
     }

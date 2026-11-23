@@ -11,8 +11,9 @@ telefonga «Söz» bilan yonma-yon örnatiladi va ikki narsa qöşadi:
 
 - **Tarjimon (to'ğridan-to'ğri, Tor'siz).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi:
   tugmalar ilovaga emas, şu qatorga yozadi; ➤ — tarjima, «Qöyiş» — maydonga qöyiş, 📋 — buferdagi matnni
-  tarjima. Xizmat — Google Cloud Translation (oyiga 500 ming belgigaça bepul); ilovaga CI'da qotirilgan
-  standart kalit bilan işlaydi, sozlamadan özingiznikini kiritişingiz ham mumkin. Yangi alifbodagi matn
+  tarjima. Sozlamalarda üç tanlov: «Standart» — ilovaga CI'da qotirilgan Google Cloud Translation kaliti
+  (heç narsa kiritmasdan işlaydi, sukut); «Google» yoki «Azure» — foydalanuvçining özi olgan kaliti
+  (Google: oyiga 500 ming, Azure F0: 2 mln belgigaça bepul). Yangi alifbodagi matn
   xizmatga eski imloda (oʻ, sh…) yuboriladi, natija yangi alifboga (yoki kirillga) qaytariladi.
   2026-11: avval Tor (Orbot) orqali edi — Google Tor çiqiş tugunlarini bloklagani uçun olib taşlandi;
   endi xizmat söroq manzilingizni (IP) körişi mumkin.
@@ -26,9 +27,10 @@ Sizib çiqişga qarşi:
 - `network_security_config.xml`: faqat tarjima manziliga TLS mumkin, boşqa hamma manzil uçun işonçli
   sertifikat yöq, şifrlanmagan HTTP taqiqlangan.
 - Söroqda faqat matn va kalit: cookie, User-Agent, qurilma yoki ilova belgisi yöq.
-- Standart kalit manbada yöq, faqat CI'dagi GitHub sirida (`GOOGLE_TRANSLATE_KEY`); şunga qaramay repo
-  PUBLIC bölgani uçun APK'dan çiqarib olinişi mumkin — kalit Google Cloud Console'da Android ilova
-  (package + SHA-1) bilan çeklangan va kvotaga ega.
+- Standart kalit manbada yöq, faqat CI'dagi GitHub sirida (`GOOGLE_TRANSLATE_KEY`). APK'ni qazib kalitni
+  çiqarib olişga bölatdi, şuning uçun Google Cloud Console'da kalitni faqat «Cloud Translation API» bilan
+  çeklang va kunlik kvota (Quotas) hamda byudjet ogohlantirişi (Budgets) qöying. «Android apps» çeklovini
+  qöymang: ilova package/SHA-1 sarlavhalarini yubormaydi, so'rovlar rad etiladi.
 - Parol maydonlarida tarjima öçiq; parollar ombori tarmoq kodiga ulanmagan.
 - Ombor: AndroidKeyStore'dagi RSA-2048 (maxfiy kalit faqat telefon qulfi tasdiqlangandan keyin 5 daqiqa
   işlaydi) + AES-256-GCM. Qulfli paytda yangi parol oçiq kalit bilan şifrlab qö'yiladi. «Bu ilovada parol

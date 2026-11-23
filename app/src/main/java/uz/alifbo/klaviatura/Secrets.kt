@@ -45,20 +45,11 @@ object Secrets {
         return m
     }
 
-    /** Foydalanuvchi saqlagan kalit; bo'lmasa — ilovaga CI'da qotirilgan standart kalit (bo'lsa). */
-    fun get(ctx: Context, name: String): String? = stored(ctx, name) ?: defaultFor(name)
+    /** Ilovaga CI'da (GitHub siridan) qotirilgan standart Google kaliti; yig'ishda sir bo'lmasa — null. */
+    fun defaultKey(): String? = BuildConfig.DEFAULT_GOOGLE_KEY.takeIf { it.isNotBlank() }
 
-    /** Foydalanuvchi o'zi saqlagan (sozlamadan kiritgan) kalit bormi — standart kalitni hisobga olmaydi. */
-    fun has(ctx: Context, name: String): Boolean = try {
-        readAll(ctx).containsKey(name)
-    } catch (t: Throwable) {
-        false
-    }
-
-    /** Hozir ishlatilayotgan kalit standart (CI'da qotirilgan), foydalanuvchi o'zi kiritmaganmi. */
-    fun usingDefault(ctx: Context, name: String): Boolean = !has(ctx, name) && defaultFor(name) != null
-
-    private fun stored(ctx: Context, name: String): String? = try {
+    /** Foydalanuvchi o'zi saqlagan (sozlamadan kiritgan) kalit; standart kalit bunga kirmaydi. */
+    fun get(ctx: Context, name: String): String? = try {
         readAll(ctx)[name]?.let { enc ->
             val raw = Base64.getDecoder().decode(enc)
             val c = Cipher.getInstance("AES/GCM/NoPadding")
@@ -69,8 +60,11 @@ object Secrets {
         null
     }
 
-    private fun defaultFor(name: String): String? =
-        if (name == Translator.KEY_NAME) BuildConfig.DEFAULT_GOOGLE_KEY.takeIf { it.isNotBlank() } else null
+    fun has(ctx: Context, name: String): Boolean = try {
+        readAll(ctx).containsKey(name)
+    } catch (t: Throwable) {
+        false
+    }
 
     /** [value] = null — o'chiradi. */
     fun put(ctx: Context, name: String, value: String?): Boolean = try {

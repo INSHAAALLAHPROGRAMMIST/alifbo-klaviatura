@@ -390,13 +390,19 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         if (trBusy) return
         val text = trBuf.toString().trim()
         if (text.isEmpty()) return
-        val key = Secrets.get(this, Translator.KEY_NAME)
+        val mode = prefs.trEngine
+        val key = Translator.keyFor(this, mode)
         if (key.isNullOrBlank()) {
-            trStatus = "Avval Söz+ sozlamalarida tarjima kalitini kiriting (bosing)"
+            trStatus = if (mode == Translator.DEFAULT) {
+                "Bu yig'işda standart kalit yöq: sozlamalarda özingiznikini kiriting (bosing)"
+            } else {
+                "Avval Söz+ sozlamalarida tarjima kalitini kiriting (bosing)"
+            }
             trError = true
             renderTranslate()
             return
         }
+        val region = prefs.azureRegion
         val target = prefs.trTarget
         val (source, payload) = Translator.prepareSource(text, langs[langIdx], trFromClip)
         trBusy = true
@@ -409,7 +415,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
             var result: String? = null
             var error: String? = null
             try {
-                result = Translator.finish(Translator.translate(key, payload, source, target), target)
+                result = Translator.finish(Translator.translate(mode, key, region, payload, source, target), target)
             } catch (e: Translator.Failure) {
                 error = e.userMessage
             } catch (e: InterruptedException) {

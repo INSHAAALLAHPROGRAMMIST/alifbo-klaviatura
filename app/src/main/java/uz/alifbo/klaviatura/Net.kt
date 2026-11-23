@@ -20,7 +20,7 @@ import javax.net.ssl.SSLSocketFactory
  */
 object Net {
     /** Faqat shu manzilga (res/xml/network_security_config.xml bilan bir xil ro'yxat). */
-    val ALLOWED_HOSTS = setOf("translation.googleapis.com")
+    val ALLOWED_HOSTS = setOf("translation.googleapis.com", "api.cognitive.microsofttranslator.com")
 
     private const val MAX_RESPONSE = 2 shl 20
     private val HEAD_END = byteArrayOf(13, 10, 13, 10)

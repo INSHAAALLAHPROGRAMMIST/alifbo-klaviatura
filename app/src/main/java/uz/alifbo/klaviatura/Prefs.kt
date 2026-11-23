@@ -69,6 +69,19 @@ class Prefs(private val context: Context) {
         get() = int("clipEpoch", 0)
         set(v) = putInt("clipEpoch", v)
 
+    /**
+     * Tarjima rejimi: Translator.DEFAULT (standart, ilovaga qotirilgan kalit; sukut), GOOGLE yoki AZURE
+     * (foydalanuvchining o'z kaliti, Secrets'da shifrlangan).
+     */
+    var trEngine: Int
+        get() = int("trEngine", Translator.DEFAULT)
+        set(v) = putInt("trEngine", v)
+
+    /** Azure resursining mintaqasi (masalan westeurope); global resurs uchun bo'sh. */
+    var azureRegion: String
+        get() = sp.getString("azureRegion", "") ?: ""
+        set(v) { sp.edit().putString("azureRegion", v).apply() }
+
     /** Tarjima qilinadigan til (Translator.targets kodi). */
     var trTarget: String
         get() = sp.getString("trTarget", "en") ?: "en"

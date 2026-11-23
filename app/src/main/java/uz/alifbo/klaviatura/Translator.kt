@@ -6,16 +6,34 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * Google Cloud Translation (oyiga 500 ming belgigacha bepul), to'g'ridan-to'g'ri ([Net]).
+ * Rasmiy tarjima xizmatlari, to'g'ridan-to'g'ri ([Net]): Google Cloud Translation (oyiga 500 ming
+ * belgigacha bepul) yoki Microsoft Azure Translator (oyiga 2 mln belgigacha bepul).
  * 2026-11: Tor olib tashlandi (Google chiqish tugunlarini bloklagani uchun) — xizmat so'rov
  * manzilingizni (IP) ko'radi. Xizmatga faqat tarjima qilinadigan matn va kalit boradi.
+ *
+ * Tarjima rejimi ([DEFAULT], [GOOGLE], [AZURE]): "Standart" — ilovaga yig'ishda qotirilgan kalit
+ * (Google), qolgan ikkisi — foydalanuvchining o'z kaliti.
  */
 object Translator {
+    const val GOOGLE = 0
+    const val AZURE = 1
+
+    /** Standart rejim: ilovaga CI'da qotirilgan Google kaliti ([Secrets.defaultKey]). */
+    const val DEFAULT = 2
+
     private const val GOOGLE_HOST = "translation.googleapis.com"
+    private const val AZURE_HOST = "api.cognitive.microsofttranslator.com"
     private const val JSON = "application/json; charset=UTF-8"
 
-    /** Secrets'da standart (ilovaga qotirilgan) kalit saqlanadigan nom. */
-    const val KEY_NAME = "google_key"
+    /** Shifrlangan kalit nomi ([Secrets] da); [DEFAULT] uchun foydalanuvchi kaliti yo'q. */
+    fun keyName(mode: Int): String = if (mode == AZURE) "azure_key" else "google_key"
+
+    /** Tarjima xizmati: [AZURE] yoki [GOOGLE] ([DEFAULT] ham Google). */
+    fun service(mode: Int): Int = if (mode == AZURE) AZURE else GOOGLE
+
+    /** Rejim uchun ishlatiladigan kalit: standart — qotirilgan, aks holda foydalanuvchi saqlagani. */
+    fun keyFor(ctx: android.content.Context, mode: Int): String? =
+        if (mode == DEFAULT) Secrets.defaultKey() else Secrets.get(ctx, keyName(mode))
 
     /** Bitta so'rovda eng ko'pi shuncha belgi (bepul kvotani tejash uchun ham). */
     const val MAX_CHARS = 3000
@@ -66,7 +84,13 @@ object Translator {
         else -> result
     }
 
-    internal fun serviceTarget(target: String): String = if (target == "uzc") "uz" else target
+    internal fun serviceTarget(target: String, service: Int): String = when (target) {
+        "uzc" -> "uz"
+        "zh" -> if (service == AZURE) "zh-Hans" else "zh-CN"
+        else -> target
+    }
+
+    // ---------------------------------------------------------------- Google Cloud Translation v2
 
     internal fun googleBody(text: String, source: String?, target: String): String {
         val o = JSONObject()
@@ -81,6 +105,18 @@ object Translator {
         if (code != 200) throw httpFailure(code, body)
         val arr = JSONObject(body).getJSONObject("data").getJSONArray("translations")
         return (0 until arr.length()).joinToString("\n") { arr.getJSONObject(it).getString("translatedText") }
+    }
+
+    // ---------------------------------------------------------------- Azure Translator v3
+
+    internal fun azurePath(source: String?, target: String): String =
+        "/translate?api-version=3.0&textType=plain&to=$target" + (if (source != null) "&from=$source" else "")
+
+    internal fun azureBody(text: String): String = JSONArray().put(JSONObject().put("Text", text)).toString()
+
+    internal fun azureParse(code: Int, body: String): String {
+        if (code != 200) throw httpFailure(code, body)
+        return JSONArray(body).getJSONObject(0).getJSONArray("translations").getJSONObject(0).getString("text")
     }
 
     // ---------------------------------------------------------------- xatolar
@@ -138,12 +174,12 @@ object Translator {
     }
 
     /** Tarjima (fon oqimida). Tarmoqqa faqat [Net] orqali chiqadi; to'g'ridan-to'g'ri (Tor'siz). */
-    fun translate(key: String, text: String, source: String?, target: String): String {
+    fun translate(mode: Int, key: String, region: String, text: String, source: String?, target: String): String {
         if (key.isBlank()) throw Failure("Avval Söz+ sozlamalarida tarjima kalitini kiriting")
         var last: Failure? = null
         repeat(ATTEMPTS) {
             try {
-                return translateOnce(key, text, source, target)
+                return translateOnce(service(mode), key, region, text, source, target)
             } catch (e: Failure) {
                 if (!e.retry) throw e
                 last = e
@@ -152,13 +188,21 @@ object Translator {
         throw last ?: Failure("Tarjima bölmadi")
     }
 
-    private fun translateOnce(key: String, text: String, source: String?, target: String): String {
-        val t = serviceTarget(target)
+    private fun translateOnce(service: Int, key: String, region: String, text: String, source: String?, target: String): String {
+        val t = serviceTarget(target, service)
         val clipped = if (text.length > MAX_CHARS) text.substring(0, MAX_CHARS) else text
         try {
-            val headers = listOf("X-Goog-Api-Key" to key.trim())
-            val r = Net.post(GOOGLE_HOST, "/language/translate/v2", JSON, googleBody(clipped, source, t).toByteArray(Charsets.UTF_8), headers)
-            return googleParse(r.code, r.body)
+            return if (service == AZURE) {
+                val headers = ArrayList<Pair<String, String>>()
+                headers.add("Ocp-Apim-Subscription-Key" to key.trim())
+                if (region.isNotBlank()) headers.add("Ocp-Apim-Subscription-Region" to region.trim())
+                val r = Net.post(AZURE_HOST, azurePath(source, t), JSON, azureBody(clipped).toByteArray(Charsets.UTF_8), headers)
+                azureParse(r.code, r.body)
+            } else {
+                val headers = listOf("X-Goog-Api-Key" to key.trim())
+                val r = Net.post(GOOGLE_HOST, "/language/translate/v2", JSON, googleBody(clipped, source, t).toByteArray(Charsets.UTF_8), headers)
+                googleParse(r.code, r.body)
+            }
         } catch (e: Net.Timeout) {
             throw Failure("Javob kelmadi (vaqt tugadi)", e, retry = true)
         } catch (e: Net.TlsFailure) {
@@ -168,7 +212,7 @@ object Translator {
         } catch (e: IOException) {
             throw Failure("Tarmoq xatosi, qayta urinib köring", e, retry = true)
         } catch (e: IllegalArgumentException) {
-            throw Failure("Kalit notöğri yozilgan", e)
+            throw Failure("Kalit yoki mintaqa notöğri yozilgan", e)
         }
     }
 }

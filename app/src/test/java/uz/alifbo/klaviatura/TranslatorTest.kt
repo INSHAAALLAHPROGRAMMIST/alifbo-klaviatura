@@ -1,5 +1,6 @@
 package uz.alifbo.klaviatura
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -11,7 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** So'rov tanasi va javoblar (Google Cloud Translation hujjatlaridagi shakl bo'yicha), tarmoqsiz. */
+/** So'rov tanasi va javoblar (xizmatlarning hujjatlaridagi shakl bo'yicha), tarmoqsiz. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TranslatorTest {
@@ -79,7 +80,39 @@ class TranslatorTest {
         assertEquals("Özbekiston gözal", Translator.finish("Oʻzbekiston goʻzal", "uz"))
         assertEquals("Ўзбекистон", Translator.finish("Oʻzbekiston", "uzc"))
         assertEquals("Hello", Translator.finish("Hello", "en"))
-        assertEquals("uz", Translator.serviceTarget("uzc"))
-        assertEquals("en", Translator.serviceTarget("en"))
+        assertEquals("uz", Translator.serviceTarget("uzc", Translator.GOOGLE))
+        assertEquals("en", Translator.serviceTarget("en", Translator.AZURE))
+        assertEquals("zh-CN", Translator.serviceTarget("zh", Translator.GOOGLE))
+        assertEquals("zh-Hans", Translator.serviceTarget("zh", Translator.AZURE))
+    }
+
+    @Test
+    fun azureSorovVaJavob() {
+        assertEquals("/translate?api-version=3.0&textType=plain&to=en&from=uz", Translator.azurePath("uz", "en"))
+        assertEquals("/translate?api-version=3.0&textType=plain&to=ru", Translator.azurePath(null, "ru"))
+        assertEquals("Salom", JSONArray(Translator.azureBody("Salom")).getJSONObject(0).getString("Text"))
+        val body = """[{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"Salom, dunyo!","to":"uz"}]}]"""
+        assertEquals("Salom, dunyo!", Translator.azureParse(200, body))
+        try {
+            Translator.azureParse(429, """{"error":{"code":429001,"message":"quota"}}""")
+            fail()
+        } catch (e: Translator.Failure) {
+            assertTrue(e.userMessage.contains("kvota"))
+        }
+    }
+
+    @Test
+    fun rejimlar() {
+        // standart rejim ham Google xizmati; kalit nomlari alohida
+        assertEquals(Translator.GOOGLE, Translator.service(Translator.DEFAULT))
+        assertEquals(Translator.GOOGLE, Translator.service(Translator.GOOGLE))
+        assertEquals(Translator.AZURE, Translator.service(Translator.AZURE))
+        assertEquals("azure_key", Translator.keyName(Translator.AZURE))
+        assertEquals("google_key", Translator.keyName(Translator.GOOGLE))
+        // sinov yig'ishida standart kalit yo'q (CI siri yo'q)
+        assertNull(Secrets.defaultKey())
+        val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        assertNull(Translator.keyFor(ctx, Translator.DEFAULT))
+        assertTrue(Net.ALLOWED_HOSTS.containsAll(listOf("translation.googleapis.com", "api.cognitive.microsofttranslator.com")))
     }
 }

@@ -12,7 +12,8 @@ import android.widget.TextView
 /**
  * Tarjima tillarini tanlaş paneli (emoji paneli kabi klaviatura o'rnida, bir xil balandlikda):
  * yuqorida — nima tilda yozilayotgani (klaviatura tili), pastda — qaysi tilga tarjima qilinişi.
- * Katta tugmalar, bir bosişda tanlanadi va panel yopiladi.
+ * Katta tugmalar, bir bosişda tanlanadi va panel yopiladi. Panel klaviatura balandligida turadi,
+ * shuning uçun oyna kattalaşmaydi.
  */
 class TrLangPanel(
     context: Context,

@@ -109,10 +109,10 @@ class TranslatorTest {
         assertEquals(Translator.AZURE, Translator.service(Translator.AZURE))
         assertEquals("azure_key", Translator.keyName(Translator.AZURE))
         assertEquals("google_key", Translator.keyName(Translator.GOOGLE))
-        // sinov yig'ishida standart kalit yo'q (CI siri yo'q)
-        assertNull(Secrets.defaultKey())
+        // standart rejim qotirilgan kalitni oladi (CI sirida bo'lsa bor, bo'lmasa null); o'z kalitlari bo'sh
         val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
-        assertNull(Translator.keyFor(ctx, Translator.DEFAULT))
+        assertEquals(Secrets.defaultKey(), Translator.keyFor(ctx, Translator.DEFAULT))
+        assertNull(Translator.keyFor(ctx, Translator.AZURE))
         assertTrue(Net.ALLOWED_HOSTS.containsAll(listOf("translation.googleapis.com", "api.cognitive.microsofttranslator.com")))
     }
 }

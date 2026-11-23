@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Sizib chiqishga qarshi: ilova faqat ikki tarjima xizmati bilan TLS orqali gaplasha oladi.
+    Sizib chiqishga qarshi: ilova faqat Google Cloud Translation bilan TLS orqali gaplasha oladi.
     Boshqa har qanday manzil uchun ishonchli sertifikat yo'q (bo'sh trust-anchors) va ochiq
     (shifrlanmagan) HTTP taqiqlangan, ya'ni kod xato qilib boshqa joyga ulanmoqchi bo'lsa ham ulana olmaydi.
 -->
@@ -10,7 +10,6 @@
     </base-config>
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="false">translation.googleapis.com</domain>
-        <domain includeSubdomains="false">api.cognitive.microsofttranslator.com</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

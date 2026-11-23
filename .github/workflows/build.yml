@@ -1,6 +1,6 @@
 name: build
 
-# "Söz+" (toliq branch): tarjimon (faqat Tor orqali) va parollar ombori bilan.
+# "Söz+" (toliq branch): tarjimon (Google Cloud Translation, to'g'ridan-to'g'ri) va parollar ombori bilan.
 on:
   push:
     branches: [toliq]
@@ -42,21 +42,30 @@ jobs:
           fi
           echo "KEYSTORE_FILE=$RUNNER_TEMP/alifbo.p12" >> "$GITHUB_ENV"
 
-      - name: Sizib chiqishga qarshi (tarmoq kodi faqat TorNet.kt da)
+      - name: Standart tarjima kaliti
+        env:
+          GOOGLE_TRANSLATE_KEY: ${{ secrets.GOOGLE_TRANSLATE_KEY }}
+        run: |
+          if [ -n "$GOOGLE_TRANSLATE_KEY" ]; then
+            echo "::add-mask::$GOOGLE_TRANSLATE_KEY"
+            echo "GOOGLE_TRANSLATE_KEY=$GOOGLE_TRANSLATE_KEY" >> "$GITHUB_ENV"
+            echo "Standart kalit qotiriladi."
+          else
+            echo "::warning::GOOGLE_TRANSLATE_KEY sir yo'q: APK'da standart kalit bo'lmaydi (foydalanuvchi o'zi kiritishi kerak)."
+          fi
+
+      - name: Sizib chiqishga qarshi (tarmoq kodi faqat Net.kt da)
         run: |
           PATTERN='java\.net\.|javax\.net\.|HttpURLConnection|HttpsURLConnection|okhttp|WebView|DatagramSocket'
-          BAD="$(grep -rlE "$PATTERN" app/src/main/java | grep -v '/TorNet\.kt$' || true)"
+          BAD="$(grep -rlE "$PATTERN" app/src/main/java | grep -v '/Net\.kt$' || true)"
           if [ -n "$BAD" ]; then
-            echo "XATO: tarmoq API'si TorNet.kt dan tashqarida:"
+            echo "XATO: tarmoq API'si Net.kt dan tashqarida:"
             echo "$BAD"
             exit 1
           fi
-          # TorNet faqat 127.0.0.1 dagi Orbot SOCKS portiga ulanadi, to'g'ridan-to'g'ri yo'l yo'q
-          grep -q 'Proxy.NO_PROXY' app/src/main/java/uz/alifbo/klaviatura/TorNet.kt
-          grep -q 'byteArrayOf(127, 0, 0, 1)' app/src/main/java/uz/alifbo/klaviatura/TorNet.kt
-          echo "Tarmoq kodi faqat TorNet.kt da (Tor orqali)."
+          echo "Tarmoq kodi faqat Net.kt da."
 
-      - name: Testlar (maketlar, alifbo, Tor, tarjima, parollar)
+      - name: Testlar (maketlar, alifbo, tarjima, parollar)
         run: gradle --no-daemon testDebugUnitTest
 
       - name: Dizayn rasmlari
@@ -83,7 +92,7 @@ jobs:
             echo "$EXTRA"
             exit 1
           fi
-          echo "Ruxsatlar: faqat INTERNET (Tor orqali tarjima) va USE_BIOMETRIC (parollar)."
+          echo "Ruxsatlar: faqat INTERNET (to'g'ridan-to'g'ri tarjima) va USE_BIOMETRIC (parollar)."
 
       - name: Imzo sertifikati
         run: |

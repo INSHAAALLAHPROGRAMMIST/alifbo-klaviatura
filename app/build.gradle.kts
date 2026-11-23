@@ -8,6 +8,10 @@ val keystorePath: String? = System.getenv("KEYSTORE_FILE")
 val keystorePassword: String? = System.getenv("KEYSTORE_PASSWORD")
 val hasKeystore = !keystorePath.isNullOrBlank() && !keystorePassword.isNullOrBlank()
 
+// Standart Google Tarjima kaliti ham faqat CI'da (GitHub sirlaridan) qotiriladi; manbada yo'q.
+// Foydalanuvchi sozlamadan o'zining kalitini kiritsa, shu standart kalit e'tiborga olinmaydi.
+val defaultGoogleKey: String = (System.getenv("GOOGLE_TRANSLATE_KEY") ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
+
 android {
     namespace = "uz.alifbo.klaviatura"
     compileSdk = 35
@@ -21,6 +25,11 @@ android {
         val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionCode = run
         versionName = "0.4.$run"
+        buildConfigField("String", "DEFAULT_GOOGLE_KEY", "\"$defaultGoogleKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

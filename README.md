@@ -9,24 +9,26 @@ yangi versiyalar avvalgisining ustidan örnatilaveradi.
 Asosiy «Söz» internetsiz qoladi. Bu branchdagi «Söz+» — alohida ilova (`uz.alifbo.klaviatura.toliq`),
 telefonga «Söz» bilan yonma-yon örnatiladi va ikki narsa qöşadi:
 
-- **Tarjimon (faqat Tor orqali).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi: tugmalar
-  ilovaga emas, şu qatorga yozadi; ➤ — tarjima, «Qöyiş» — maydonga qöyiş, 📋 — buferdagi matnni tarjima.
-  Xizmat — sizning kalitingiz bilan rasmiy Google Cloud Translation (oyiga 500 ming belgigaça bepul) yoki
-  Microsoft Azure Translator (2 mln). Yangi alifbodagi matn xizmatga eski imloda (oʻ, sh…) yuboriladi,
-  natija yangi alifboga (yoki kirillga) qaytariladi.
+- **Tarjimon (to'ğridan-to'ğri, Tor'siz).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi:
+  tugmalar ilovaga emas, şu qatorga yozadi; ➤ — tarjima, «Qöyiş» — maydonga qöyiş, 📋 — buferdagi matnni
+  tarjima. Xizmat — Google Cloud Translation (oyiga 500 ming belgigaça bepul); ilovaga CI'da qotirilgan
+  standart kalit bilan işlaydi, sozlamadan özingiznikini kiritişingiz ham mumkin. Yangi alifbodagi matn
+  xizmatga eski imloda (oʻ, sh…) yuboriladi, natija yangi alifboga (yoki kirillga) qaytariladi.
+  2026-11: avval Tor (Orbot) orqali edi — Google Tor çiqiş tugunlarini bloklagani uçun olib taşlandi;
+  endi xizmat söroq manzilingizni (IP) körişi mumkin.
 - **Parollar ombori.** Kiriş maydonidan çiqilganda login (email / telefon / foydalanuvçi nomi) va parol
   şifrlab eslab qolinadi; keyingi safar qatorda 🔑 — telefon qulfi bilan tasdiqlab töldiriladi. Zaif parol
   yozilsa yoki yangi parol maydonida kuçli parol taklif qilinadi. Bosh parol bilan şifrlangan zaxira nusxa.
 
 Sizib çiqişga qarşi:
 
-- Tarmoq kodi faqat `TorNet.kt` da (CI boşqa faylda `java.net`/`javax.net` paydo bölsa yiğişni töxtatadi).
-  U faqat `127.0.0.1:9050` dagi Orbot SOCKS5 portiga ulanadi, manzilni Tor hal qiladi (DNS ham telefondan
-  çiqmaydi). To'ğridan-to'ğri ulaniş yöli yöq: Tor işlamasa, matn heç qayerga ketmaydi.
-- Har söroqqa tasodifiy SOCKS login: Tor har biriga alohida zanjir quradi.
-- `network_security_config.xml`: faqat ikki tarjima manziliga TLS mumkin, boşqa hamma manzil uçun
-  işonçli sertifikat yöq, şifrlanmagan HTTP taqiqlangan.
+- Tarmoq kodi faqat `Net.kt` da (CI boşqa faylda `java.net`/`javax.net` paydo bölsa yiğişni töxtatadi).
+- `network_security_config.xml`: faqat tarjima manziliga TLS mumkin, boşqa hamma manzil uçun işonçli
+  sertifikat yöq, şifrlanmagan HTTP taqiqlangan.
 - Söroqda faqat matn va kalit: cookie, User-Agent, qurilma yoki ilova belgisi yöq.
+- Standart kalit manbada yöq, faqat CI'dagi GitHub sirida (`GOOGLE_TRANSLATE_KEY`); şunga qaramay repo
+  PUBLIC bölgani uçun APK'dan çiqarib olinişi mumkin — kalit Google Cloud Console'da Android ilova
+  (package + SHA-1) bilan çeklangan va kvotaga ega.
 - Parol maydonlarida tarjima öçiq; parollar ombori tarmoq kodiga ulanmagan.
 - Ombor: AndroidKeyStore'dagi RSA-2048 (maxfiy kalit faqat telefon qulfi tasdiqlangandan keyin 5 daqiqa
   işlaydi) + AES-256-GCM. Qulfli paytda yangi parol oçiq kalit bilan şifrlab qö'yiladi. «Bu ilovada parol

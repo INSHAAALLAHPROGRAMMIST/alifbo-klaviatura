@@ -73,7 +73,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
     private var clipboardEpoch = 0
     private val clipListener = ClipboardManager.OnPrimaryClipChangedListener { captureClipboard() }
 
-    // tarjima (Tor orqali): tugmalar ilovaga emas, tarjima qatoriga yozadi
+    // tarjima (to'g'ridan-to'g'ri, Tor'siz): tugmalar ilovaga emas, tarjima qatoriga yozadi
     private var trMode = false
     private val trBuf = StringBuilder()
 
@@ -83,7 +83,6 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
     private var trResult: String? = null
     private var trStatus: String? = null
     private var trError = false
-    private var trOrbotHint = false
     private var trBusy = false
     private var trSeq = 0
     private val worker = Executors.newSingleThreadExecutor()
@@ -273,7 +272,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         refreshSuggestions()
     }
 
-    // ---------------------------------------------------------------- tarjima (Tor orqali)
+    // ---------------------------------------------------------------- tarjima (to'g'ridan-to'g'ri)
 
     private fun toggleTranslate() {
         if (trMode) closeTranslate() else openTranslate()
@@ -302,7 +301,6 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         trResult = null
         trStatus = null
         trError = false
-        trOrbotHint = false
         r.showTranslate(this)
         r.keyboard.enterStyle = EnterStyle.SEND
         trAutoCap()
@@ -338,7 +336,6 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         if (!trBusy) {
             trStatus = null
             trError = false
-            trOrbotHint = false
         }
         if (shift == Shift.ONCE) setShift(Shift.OFF)
         trAutoCap()
@@ -393,62 +390,26 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         if (trBusy) return
         val text = trBuf.toString().trim()
         if (text.isEmpty()) return
-        val engine = prefs.trEngine
-        val key = Secrets.get(this, Translator.keyName(engine))
+        val key = Secrets.get(this, Translator.KEY_NAME)
         if (key.isNullOrBlank()) {
             trStatus = "Avval Söz+ sozlamalarida tarjima kalitini kiriting (bosing)"
             trError = true
-            trOrbotHint = false
             renderTranslate()
             return
         }
-        val region = prefs.azureRegion
         val target = prefs.trTarget
         val (source, payload) = Translator.prepareSource(text, langs[langIdx], trFromClip)
         trBusy = true
         trError = false
-        trOrbotHint = false
         trResult = null
-        trStatus = "Tor orqali tarjima qilinmoqda…"
+        trStatus = "Tarjima qilinmoqda…"
         val seq = ++trSeq
         renderTranslate()
-        val app = applicationContext
         worker.execute {
             var result: String? = null
             var error: String? = null
-            var orbot = false
             try {
-                if (!TorNet.isUp()) {
-                    orbot = true
-                    if (!TorNet.isOrbotInstalled(app)) {
-                        throw Translator.Failure("Tor uçun Orbot ilovasi kerak — Söz+ sozlamalaridan örnating")
-                    }
-                    TorNet.requestStart(app)
-                    ui.post {
-                        if (seq == trSeq) {
-                            trStatus = "Orbot (Tor) işga tuşirilmoqda…"
-                            renderTranslate()
-                        }
-                    }
-                    var up = false
-                    for (i in 0 until 30) {
-                        Thread.sleep(1000)
-                        if (seq != trSeq) return@execute
-                        if (TorNet.isUp()) {
-                            up = true
-                            break
-                        }
-                    }
-                    if (!up) throw Translator.Failure("Orbot ulanmadi: Orbot'ni oçib «Start» bosing (bosing — oçiladi)")
-                    orbot = false
-                    ui.post {
-                        if (seq == trSeq) {
-                            trStatus = "Tor orqali tarjima qilinmoqda…"
-                            renderTranslate()
-                        }
-                    }
-                }
-                result = Translator.finish(Translator.translate(engine, key, region, payload, source, target), target)
+                result = Translator.finish(Translator.translate(key, payload, source, target), target)
             } catch (e: Translator.Failure) {
                 error = e.userMessage
             } catch (e: InterruptedException) {
@@ -458,7 +419,6 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
             }
             val res = result
             val err = error
-            val orbotErr = orbot
             ui.post {
                 if (seq != trSeq) return@post
                 trBusy = false
@@ -469,7 +429,6 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
                 } else {
                     trStatus = err
                     trError = true
-                    trOrbotHint = orbotErr
                 }
                 renderTranslate()
             }
@@ -553,9 +512,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
     }
 
     override fun onTrStatusTap() {
-        if (trOrbotHint) {
-            if (!TorNet.openOrbot(this)) TorNet.openOrbotStore(this)
-        } else if (trError && trStatus?.contains("kalit") == true) {
+        if (trError && trStatus?.contains("kalit") == true) {
             try {
                 startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (t: Throwable) {

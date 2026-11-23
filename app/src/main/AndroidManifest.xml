@@ -2,19 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!--
-        "Söz+" (toliq branch): internet FAQAT tarjima uchun va FAQAT Tor (Orbot) orqali.
-        To'g'ridan-to'g'ri ulanish kodi yo'q; network_security_config boshqa hamma manzillarga
-        TLS'ni yopadi; CI tarmoq kodi TorNet.kt'dan tashqarida paydo bo'lsa yig'ishni to'xtatadi.
+        "Söz+" (toliq branch): internet FAQAT tarjima uchun, faqat Google Cloud Translation'ga
+        (2026-11: Tor olib tashlandi — Google chiqish tugunlarini bloklagani uchun). To'g'ridan-to'g'ri
+        boshqa hech qayerga ulanish kodi yo'q; network_security_config boshqa hamma manzillarga TLS'ni
+        yopadi; CI tarmoq kodi Net.kt'dan tashqarida paydo bo'lsa yig'ishni to'xtatadi.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Parollar omborini barmoq izi / PIN bilan ochish (oddiy ruxsat, so'ralmaydi) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-
-    <queries>
-        <!-- Tor: Orbot ilovasi -->
-        <package android:name="org.torproject.android" />
-        <package android:name="com.android.vending" />
-    </queries>
 
     <application
         android:allowBackup="false"

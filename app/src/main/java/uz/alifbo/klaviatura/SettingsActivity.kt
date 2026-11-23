@@ -42,15 +42,11 @@ class SettingsActivity : Activity() {
     private var previewLang: Lang = Lang.UZ
 
     // tarjima va parollar
-    private lateinit var orbotStatus: TextView
-    private lateinit var orbotButton: TextView
     private lateinit var keyStatus: TextView
     private lateinit var keyHelp: TextView
     private lateinit var keyInput: EditText
-    private lateinit var regionInput: EditText
     private lateinit var testResult: TextView
     private lateinit var vaultStatus: TextView
-    private val engineButtons = ArrayList<TextView>()
     private var pendingExport: ByteArray? = null
 
     private var pageBg = 0
@@ -109,8 +105,9 @@ class SettingsActivity : Activity() {
         buildSourcesCard()
 
         val foot = label(
-            "Söz+ internetga faqat tarjima uçun, faqat siz ➤ bosganda va faqat Tor orqali çiqadi. " +
-                "Yozganlaringiz, örganilgan sözlar, bufer va parollar faqat telefoningizda qoladi.",
+            "Söz+ internetga faqat tarjima uçun va faqat siz ➤ bosganda çiqadi (to'g'ridan-to'g'ri, " +
+                "Tor'siz — Google xizmatga söroq manzilingizni körishi mumkin). Yozganlaringiz, örganilgan " +
+                "sözlar, bufer va parollar faqat telefoningizda qoladi.",
             12f, muted,
         )
         content.addView(foot, lp().apply { topMargin = dpi(20) })
@@ -360,47 +357,26 @@ class SettingsActivity : Activity() {
         Toast.makeText(this, "Bufer tarixi öçirildi", Toast.LENGTH_SHORT).show()
     }
 
-    // ---------------------------------------------------------------- tarjima (Tor orqali)
+    // ---------------------------------------------------------------- tarjima (to'g'ridan-to'g'ri)
 
     private fun buildTranslateCard() {
-        val c = card("Tarjima (Tor orqali)")
+        val c = card("Tarjima")
         c.addView(
             label(
                 "Tahmin qatoridagi «A文» tugmasi klaviatura içida tarjima qatorini oçadi: yozasiz, ➤ bosasiz, " +
                     "tarjimani körib «Qöyiş» bilan maydonga qöyasiz. 📋 — buferdagi matnni (masalan, kelgan xabarni) " +
-                    "tarjima qiliş. Matn faqat siz ➤ bosganingizda va faqat Tor tarmoği orqali ketadi: xizmat IP " +
-                    "manzilingizni körmaydi, har tarjima alohida Tor zanjiridan ketadi. Tor işlamasa, matn heç " +
-                    "qayerga yuborilmaydi. Parol maydonlarida tarjima öçiq; parollar ombori tarmoqqa heç qaçon çiqmaydi.",
+                    "tarjima qiliş. Matn faqat siz ➤ bosganingizda, Google Cloud Translation xizmatiga " +
+                    "to'g'ridan-to'g'ri ketadi (Tor'siz — xizmat söroq manzilingizni körishi mumkin). Parol " +
+                    "maydonlarida tarjima öçiq; parollar ombori tarmoqqa heç qaçon çiqmaydi.",
                 12f, muted,
             ),
         )
 
-        c.addView(label("1. Tor (Orbot ilovasi)", 15f, ink), lp().apply { topMargin = dpi(14) })
-        orbotStatus = label("", 13f, muted)
-        c.addView(orbotStatus)
-        orbotButton = pill("") {
-            if (TorNet.isOrbotInstalled(this)) TorNet.openOrbot(this) else TorNet.openOrbotStore(this)
-        }
-        c.addView(orbotButton, lp().apply { topMargin = dpi(8) })
-
-        c.addView(label("2. Tarjima xizmati va kalit", 15f, ink), lp().apply { topMargin = dpi(16) })
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val names = listOf("Google Cloud", "Azure")
-        names.forEachIndexed { i, name ->
-            val b = chip(name) {
-                prefs.trEngine = i
-                refreshTranslateCard()
-            }
-            engineButtons.add(b)
-            row.addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
-                if (i < names.size - 1) marginEnd = dpi(6)
-            })
-        }
-        c.addView(row, lp().apply { topMargin = dpi(6) })
+        c.addView(label("Tarjima kaliti", 15f, ink), lp().apply { topMargin = dpi(14) })
         keyStatus = label("", 13f, muted)
         c.addView(keyStatus, lp().apply { topMargin = dpi(8) })
         keyInput = EditText(this).apply {
-            hint = "API kaliti"
+            hint = "API kaliti (bösh qoldirsangiz, standart kalit işlatiladi)"
             setHintTextColor(muted)
             setTextColor(ink)
             textSize = 15f
@@ -409,21 +385,11 @@ class SettingsActivity : Activity() {
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         }
         c.addView(keyInput)
-        regionInput = EditText(this).apply {
-            hint = "Azure mintaqasi (masalan: westeurope)"
-            setHintTextColor(muted)
-            setTextColor(ink)
-            textSize = 15f
-            isSingleLine = true
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            setText(prefs.azureRegion)
-        }
-        c.addView(regionInput)
         c.addView(pill("Kalitni saqlaş") { saveTranslateKey() }, lp().apply { topMargin = dpi(8) })
         keyHelp = label("", 12f, muted)
         c.addView(keyHelp, lp().apply { topMargin = dpi(8) })
 
-        c.addView(label("3. Sinab köriş", 15f, ink), lp().apply { topMargin = dpi(16) })
+        c.addView(label("Sinab köriş", 15f, ink), lp().apply { topMargin = dpi(16) })
         c.addView(pill("«Salom, dunyo!» ni tarjima qiliş") { testTranslate() }, lp().apply { topMargin = dpi(8) })
         testResult = label("", 13f, muted)
         c.addView(testResult, lp().apply { topMargin = dpi(6) })
@@ -431,40 +397,32 @@ class SettingsActivity : Activity() {
     }
 
     private fun refreshTranslateCard() {
-        if (!::orbotStatus.isInitialized) return
-        val orbot = TorNet.isOrbotInstalled(this)
-        orbotStatus.text = if (orbot) {
-            "✓ Orbot örnatilgan. Tarjimadan oldin Orbot'da Tor yoqilgan bölişi kerak (Söz+ özi ham söraydi)."
-        } else {
-            "Orbot örnatilmagan: Tor'siz tarjima umuman işlamaydi."
+        if (!::keyStatus.isInitialized) return
+        val has = Secrets.has(this, Translator.KEY_NAME)
+        val usingDefault = Secrets.usingDefault(this, Translator.KEY_NAME)
+        keyStatus.text = when {
+            has -> "✓ O'zingizning kalitingiz saqlangan (şifrlangan). Yangisini kiritsangiz, almaşadi."
+            usingDefault -> "✓ Ilovaga qotirilgan standart kalit işlatilmoqda. Xohlasangiz, özingiznikini kiriting."
+            else -> "Kalit hali yöq"
         }
-        orbotButton.text = if (orbot) "Orbot'ni oçiş" else "Orbot'ni örnatiş (Play Market)"
-        val engine = prefs.trEngine
-        engineButtons.forEachIndexed { i, b -> styleChip(b, i == engine) }
-        regionInput.visibility = if (engine == Translator.AZURE) View.VISIBLE else View.GONE
-        val has = Secrets.has(this, Translator.keyName(engine))
-        keyStatus.text = if (has) "✓ Kalit saqlangan (şifrlangan). Yangisini kiritsangiz, almaşadi." else "Kalit hali kiritilmagan"
-        keyStatus.setTextColor(if (has) accent else muted)
-        keyHelp.text = if (engine == Translator.AZURE) {
-            "Azure Translator: portal.azure.com → «Translator» resursi (F0 — oyiga 2 mln belgigaça bepul) → " +
-                "«Keys and Endpoint» bölimidagi KEY 1 va Location/Region. Hisob oçişda karta söraladi."
-        } else {
-            "Google Cloud: console.cloud.google.com → «Cloud Translation API» ni yoqing → «Credentials» → " +
-                "«Create API key». Oyiga 500 ming belgigaça bepul, hisobda karta (billing) bölişi kerak. " +
-                "Xavfsizlik uçun kalitni faqat «Cloud Translation API» bilan çeklang."
-        }
+        keyStatus.setTextColor(if (has || usingDefault) accent else muted)
+        keyHelp.text = "Özingizning kalitingiz: console.cloud.google.com → «Cloud Translation API» ni " +
+            "yoqing → «Credentials» → «Create API key». Oyiga 500 ming belgigaça bepul, hisobda karta " +
+            "(billing) bölişi kerak. Xavfsizlik uçun kalitni faqat «Cloud Translation API» bilan çeklang."
     }
 
     private fun saveTranslateKey() {
-        val engine = prefs.trEngine
         val key = keyInput.text.toString().trim()
-        if (engine == Translator.AZURE) prefs.azureRegion = regionInput.text.toString().trim()
         if (key.isEmpty()) {
-            Toast.makeText(this, if (engine == Translator.AZURE) "Mintaqa saqlandi" else "Kalit bös", Toast.LENGTH_SHORT).show()
+            if (!Secrets.put(this, Translator.KEY_NAME, null)) {
+                Toast.makeText(this, "Kalit öçirilmadi", Toast.LENGTH_SHORT).show()
+                return
+            }
+            Toast.makeText(this, "O'z kalitingiz öçirildi, standart kalit işlatiladi", Toast.LENGTH_SHORT).show()
             refreshTranslateCard()
             return
         }
-        if (!Secrets.put(this, Translator.keyName(engine), key)) {
+        if (!Secrets.put(this, Translator.KEY_NAME, key)) {
             Toast.makeText(this, "Kalit saqlanmadi", Toast.LENGTH_SHORT).show()
             return
         }
@@ -492,31 +450,16 @@ class SettingsActivity : Activity() {
     }
 
     private fun testTranslate() {
-        val engine = prefs.trEngine
-        val key = Secrets.get(this, Translator.keyName(engine))
+        val key = Secrets.get(this, Translator.KEY_NAME)
         if (key.isNullOrBlank()) {
             testResult.text = "Avval kalitni kiriting va saqlang"
             return
         }
-        val region = prefs.azureRegion
-        testResult.text = "Tor orqali yuborilmoqda…"
-        val app = applicationContext
+        testResult.text = "Yuborilmoqda…"
         Thread {
             val msg = try {
-                if (!TorNet.isUp()) {
-                    TorNet.requestStart(app)
-                    var up = false
-                    for (i in 0 until 20) {
-                        Thread.sleep(1000)
-                        if (TorNet.isUp()) {
-                            up = true
-                            break
-                        }
-                    }
-                    if (!up) throw Translator.Failure("Orbot (Tor) işlamayapti: Orbot'ni oçib «Start» bosing")
-                }
                 val src = UzScript.newToOld("Salom, dunyo! Bugun havo juda yaxşi.")
-                "✓ " + Translator.translate(engine, key, region, src, "uz", "en")
+                "✓ " + Translator.translate(key, src, "uz", "en")
             } catch (e: Translator.Failure) {
                 "✗ " + e.userMessage
             } catch (e: Exception) {
@@ -733,8 +676,7 @@ class SettingsActivity : Activity() {
                     "• UzBooks — tahrirchi (Apache-2.0): özbekça badiiy kitoblar (faqat söz statistikasi)\n" +
                     "• Tatoeba — tatoeba.org (CC BY 2.0 FR): inglizça va ruscha gaplar\n" +
                     "Emoji paneli: AndroidX Emoji2 (Apache-2.0).\n" +
-                    "Tor: Orbot — Guardian Project (alohida ilova). Tarjima: Google Cloud Translation yoki " +
-                    "Microsoft Azure Translator (sizning kalitingiz bilan).",
+                    "Tarjima: Google Cloud Translation (to'g'ridan-to'g'ri).",
                 13f, ink,
             ),
         )

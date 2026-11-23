@@ -6,17 +6,16 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * Rasmiy tarjima xizmatlari (foydalanuvchining o'z API kaliti bilan), faqat Tor orqali ([TorNet]).
- * Google Cloud Translation (oyiga 500 ming belgigacha bepul) yoki Microsoft Azure Translator
- * (oyiga 2 mln belgigacha bepul). Xizmatga faqat tarjima qilinadigan matn va kalit boradi.
+ * Google Cloud Translation (oyiga 500 ming belgigacha bepul), to'g'ridan-to'g'ri ([Net]).
+ * 2026-11: Tor olib tashlandi (Google chiqish tugunlarini bloklagani uchun) — xizmat so'rov
+ * manzilingizni (IP) ko'radi. Xizmatga faqat tarjima qilinadigan matn va kalit boradi.
  */
 object Translator {
-    const val GOOGLE = 0
-    const val AZURE = 1
-
     private const val GOOGLE_HOST = "translation.googleapis.com"
-    private const val AZURE_HOST = "api.cognitive.microsofttranslator.com"
     private const val JSON = "application/json; charset=UTF-8"
+
+    /** Secrets'da standart (ilovaga qotirilgan) kalit saqlanadigan nom. */
+    const val KEY_NAME = "google_key"
 
     /** Bitta so'rovda eng ko'pi shuncha belgi (bepul kvotani tejash uchun ham). */
     const val MAX_CHARS = 3000
@@ -29,19 +28,16 @@ object Translator {
 
     fun shortName(code: String): String = targets.firstOrNull { it.first == code }?.second ?: code.uppercase()
 
-    /** Shifrlangan kalit nomi ([Secrets] da). */
-    fun keyName(engine: Int): String = if (engine == AZURE) "azure_key" else "google_key"
-
     /** Foydalanuvchiga ko'rsatiladigan xato. */
     class Failure(
         val userMessage: String,
         cause: Throwable? = null,
-        /** Boshqa Tor zanjiri (boshqa chiqish tuguni) bilan qayta urinish foydali. */
+        /** Vaqtincha xizmat xatosi: qayta urinish foydali. */
         val retry: Boolean = false,
     ) : Exception(userMessage, cause)
 
-    /** Bir tarjimaga eng ko'pi shuncha urinish (har biri yangi Tor zanjiri orqali). */
-    private const val ATTEMPTS = 3
+    /** Vaqtincha (5xx) xatoda eng ko'pi shuncha urinish. */
+    private const val ATTEMPTS = 2
 
     /**
      * Yuboriladigan manba: (til kodi yoki null = xizmat o'zi aniqlaydi, yuboriladigan matn).
@@ -70,13 +66,7 @@ object Translator {
         else -> result
     }
 
-    internal fun serviceTarget(target: String, engine: Int): String = when (target) {
-        "uzc" -> "uz"
-        "zh" -> if (engine == AZURE) "zh-Hans" else "zh-CN"
-        else -> target
-    }
-
-    // ---------------------------------------------------------------- Google Cloud Translation v2
+    internal fun serviceTarget(target: String): String = if (target == "uzc") "uz" else target
 
     internal fun googleBody(text: String, source: String?, target: String): String {
         val o = JSONObject()
@@ -91,18 +81,6 @@ object Translator {
         if (code != 200) throw httpFailure(code, body)
         val arr = JSONObject(body).getJSONObject("data").getJSONArray("translations")
         return (0 until arr.length()).joinToString("\n") { arr.getJSONObject(it).getString("translatedText") }
-    }
-
-    // ---------------------------------------------------------------- Azure Translator v3
-
-    internal fun azurePath(source: String?, target: String): String =
-        "/translate?api-version=3.0&textType=plain&to=$target" + (if (source != null) "&from=$source" else "")
-
-    internal fun azureBody(text: String): String = JSONArray().put(JSONObject().put("Text", text)).toString()
-
-    internal fun azureParse(code: Int, body: String): String {
-        if (code != 200) throw httpFailure(code, body)
-        return JSONArray(body).getJSONObject(0).getJSONArray("translations").getJSONObject(0).getString("text")
     }
 
     // ---------------------------------------------------------------- xatolar
@@ -128,17 +106,14 @@ object Translator {
         null to null
     }
 
-    /**
-     * HTTP xatosini foydalanuvchiga tushunarli sababga aylantiradi. JSON emas (HTML) 403/429 —
-     * odatda xizmat shu Tor chiqish tugunini "g'alati trafik" deb to'sgan: boshqa zanjir bilan qayta urinamiz.
-     */
+    /** HTTP xatosini foydalanuvchiga tushunarli sababga aylantiradi. */
     internal fun httpFailure(code: Int, body: String): Failure {
         val (message, reason) = errorInfo(body)
         val m = (message ?: "").lowercase()
         val r = (reason ?: "").uppercase()
         val json = body.trimStart().let { it.startsWith("{") || it.startsWith("[") }
         if (!json && (code == 403 || code == 429 || code == 503)) {
-            return Failure("Xizmat bu Tor çiqiş tugunini töşdi ($code)", retry = true)
+            return Failure("Xizmat söroqni töşdi ($code)", retry = true)
         }
         val text = when {
             r == "API_KEY_INVALID" || "api key not valid" in m ->
@@ -162,51 +137,38 @@ object Translator {
         return Failure("$text ($tail)", retry = code in 500..599)
     }
 
-    /** Tarjima (fon oqimida). Tarmoqqa faqat [TorNet] orqali chiqadi; Tor bo'lmasa — [Failure]. */
-    fun translate(engine: Int, key: String, region: String, text: String, source: String?, target: String): String {
+    /** Tarjima (fon oqimida). Tarmoqqa faqat [Net] orqali chiqadi; to'g'ridan-to'g'ri (Tor'siz). */
+    fun translate(key: String, text: String, source: String?, target: String): String {
         if (key.isBlank()) throw Failure("Avval Söz+ sozlamalarida tarjima kalitini kiriting")
         var last: Failure? = null
         repeat(ATTEMPTS) {
             try {
-                return translateOnce(engine, key, region, text, source, target)
+                return translateOnce(key, text, source, target)
             } catch (e: Failure) {
                 if (!e.retry) throw e
                 last = e
             }
         }
-        val f = last ?: Failure("Tarjima bölmadi")
-        throw Failure("${f.userMessage}; $ATTEMPTS xil Tor zanjiri bilan urinildi", f.cause)
+        throw last ?: Failure("Tarjima bölmadi")
     }
 
-    private fun translateOnce(engine: Int, key: String, region: String, text: String, source: String?, target: String): String {
-        val t = serviceTarget(target, engine)
+    private fun translateOnce(key: String, text: String, source: String?, target: String): String {
+        val t = serviceTarget(target)
         val clipped = if (text.length > MAX_CHARS) text.substring(0, MAX_CHARS) else text
         try {
-            return if (engine == AZURE) {
-                val headers = ArrayList<Pair<String, String>>()
-                headers.add("Ocp-Apim-Subscription-Key" to key.trim())
-                if (region.isNotBlank()) headers.add("Ocp-Apim-Subscription-Region" to region.trim())
-                val r = TorNet.post(AZURE_HOST, azurePath(source, t), JSON, azureBody(clipped).toByteArray(Charsets.UTF_8), headers)
-                azureParse(r.code, r.body)
-            } else {
-                val headers = listOf("X-Goog-Api-Key" to key.trim())
-                val r = TorNet.post(GOOGLE_HOST, "/language/translate/v2", JSON, googleBody(clipped, source, t).toByteArray(Charsets.UTF_8), headers)
-                googleParse(r.code, r.body)
-            }
-        } catch (e: TorNet.TorDown) {
-            throw Failure("Orbot (Tor) işlamayapti", e)
-        } catch (e: TorNet.TorRefused) {
-            throw Failure("Tor tarmoği xizmatga ulana olmadi", e, retry = true)
-        } catch (e: TorNet.Timeout) {
-            throw Failure("Tor orqali javob kelmadi (vaqt tugadi)", e, retry = true)
-        } catch (e: TorNet.TlsFailure) {
+            val headers = listOf("X-Goog-Api-Key" to key.trim())
+            val r = Net.post(GOOGLE_HOST, "/language/translate/v2", JSON, googleBody(clipped, source, t).toByteArray(Charsets.UTF_8), headers)
+            return googleParse(r.code, r.body)
+        } catch (e: Net.Timeout) {
+            throw Failure("Javob kelmadi (vaqt tugadi)", e, retry = true)
+        } catch (e: Net.TlsFailure) {
             throw Failure("Xavfsiz ulaniş (TLS) tasdiqlanmadi — tarjima yuborilmadi", e)
         } catch (e: JSONException) {
             throw Failure("Xizmat javobini tuşunib bölmadi", e)
         } catch (e: IOException) {
-            throw Failure("Tarmoq xatosi, qayta urinib köring", e)
+            throw Failure("Tarmoq xatosi, qayta urinib köring", e, retry = true)
         } catch (e: IllegalArgumentException) {
-            throw Failure("Kalit yoki mintaqa notöğri yozilgan", e)
+            throw Failure("Kalit notöğri yozilgan", e)
         }
     }
 }

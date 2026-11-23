@@ -1,6 +1,5 @@
 package uz.alifbo.klaviatura
 
-import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** So'rov tanasi va javoblar (xizmatlarning hujjatlaridagi shakl bo'yicha), tarmoqsiz. */
+/** So'rov tanasi va javoblar (Google Cloud Translation hujjatlaridagi shakl bo'yicha), tarmoqsiz. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TranslatorTest {
@@ -58,28 +57,12 @@ class TranslatorTest {
     }
 
     @Test
-    fun torChiqishTuguniToSilsaQaytaUrinadi() {
-        // Google "g'alati trafik" sahifasi (JSON emas): boshqa Tor zanjiri bilan qayta urinish kerak
+    fun vaqtinchaXatoQaytaUrinadi() {
+        // JSON emas javob (HTML, g'alati trafik sahifasi va h.k.) 403/429/503 — qayta urinish foydali
         val html = "<html><body>We're sorry... but your computer or network may be sending automated queries.</body></html>"
         val f = Translator.httpFailure(403, html)
         assertTrue(f.retry)
-        assertTrue(f.userMessage.contains("Tor"))
         assertTrue(Translator.httpFailure(503, "Service Unavailable").retry)
-    }
-
-    @Test
-    fun azureSorovVaJavob() {
-        assertEquals("/translate?api-version=3.0&textType=plain&to=en&from=uz", Translator.azurePath("uz", "en"))
-        assertEquals("/translate?api-version=3.0&textType=plain&to=ru", Translator.azurePath(null, "ru"))
-        assertEquals("Salom", JSONArray(Translator.azureBody("Salom")).getJSONObject(0).getString("Text"))
-        val body = """[{"detectedLanguage":{"language":"en","score":1.0},"translations":[{"text":"Salom, dunyo!","to":"uz"}]}]"""
-        assertEquals("Salom, dunyo!", Translator.azureParse(200, body))
-        try {
-            Translator.azureParse(429, """{"error":{"code":429001,"message":"quota"}}""")
-            fail()
-        } catch (e: Translator.Failure) {
-            assertTrue(e.userMessage.contains("kvota"))
-        }
     }
 
     @Test
@@ -96,7 +79,7 @@ class TranslatorTest {
         assertEquals("Özbekiston gözal", Translator.finish("Oʻzbekiston goʻzal", "uz"))
         assertEquals("Ўзбекистон", Translator.finish("Oʻzbekiston", "uzc"))
         assertEquals("Hello", Translator.finish("Hello", "en"))
-        assertEquals("uz", Translator.serviceTarget("uzc", Translator.GOOGLE))
-        assertEquals("zh-Hans", Translator.serviceTarget("zh", Translator.AZURE))
+        assertEquals("uz", Translator.serviceTarget("uzc"))
+        assertEquals("en", Translator.serviceTarget("en"))
     }
 }

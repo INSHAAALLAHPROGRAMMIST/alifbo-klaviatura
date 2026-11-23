@@ -10,8 +10,12 @@ Asosiy «Söz» internetsiz qoladi. Bu branchdagi «Söz+» — alohida ilova (`
 telefonga «Söz» bilan yonma-yon örnatiladi va ikki narsa qöşadi:
 
 - **Tarjimon (to'ğridan-to'ğri, Tor'siz).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi:
-  tugmalar ilovaga emas, şu qatorga yozadi; ➤ — tarjima, «Qöyiş» — maydonga qöyiş, 📋 — buferdagi matnni
-  tarjima. Sozlamalarda üç tanlov: «Standart» — ilovaga CI'da qotirilgan Google Cloud Translation kaliti
+  tugmalar ilovaga emas, şu qatorga yozadi; ➤ — tarjima va natija DARHOL yozilayotgan maydonga yoziladi
+  (belgilangan matn bo'lsa — uning o'rniga), klaviatura içida natija çiqmaydi; qatorda qisqa «✓ Qöyildi ·
+  qaytariş» xabari qoladi (bosilsa — tarjima olib tashlanib asl matn qaytadi). 📋 — buferdagi matnni tarjima.
+  Qator bir balandlikda (40 dp) qoladi: holat xabari matn o'rnida körinadi, yuqoridagi ilova ekrani
+  torayib-kengaymaydi. Til tanlaş: [UZ ⇄ EN] bosilsa klaviatura o'rnida katta tugmali panel oçiladi
+  (nima tilda yozasiz / qaysi tilga), ⇄ — tillarni almaştirişi. Sozlamalarda üç tanlov: «Standart» — ilovaga CI'da qotirilgan Google Cloud Translation kaliti
   (heç narsa kiritmasdan işlaydi, sukut); «Google» yoki «Azure» — foydalanuvçining özi olgan kaliti
   (Google: oyiga 500 ming, Azure F0: 2 mln belgigaça bepul). Yangi alifbodagi matn
   xizmatga eski imloda (oʻ, sh…) yuboriladi, natija yangi alifboga (yoki kirillga) qaytariladi.

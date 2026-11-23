@@ -46,6 +46,21 @@ object Translator {
 
     fun shortName(code: String): String = targets.firstOrNull { it.first == code }?.second ?: code.uppercase()
 
+    /** Tilning o'z nomi (panelda tanişga qulay). */
+    fun displayName(code: String): String = when (code) {
+        "uz" -> "Özbek"
+        "uzc" -> "Ўзбек"
+        "en" -> "English"
+        "ru" -> "Русский"
+        "tr" -> "Türkçe"
+        "de" -> "Deutsch"
+        "fr" -> "Français"
+        "ko" -> "한국어"
+        "ar" -> "العربية"
+        "zh" -> "中文"
+        else -> code.uppercase()
+    }
+
     /** Foydalanuvchiga ko'rsatiladigan xato. */
     class Failure(
         val userMessage: String,

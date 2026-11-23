@@ -50,6 +50,9 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
 
     private var lastAutoCorrect: AutoFix? = null
 
+    /** Maydonga qöyilgan tarjima: natija, asl matn va u belgilangan matndan boshlanganmi (qaytariş uçun). */
+    private class TrUndo(val result: String, val original: String, val fromSelection: Boolean)
+
     /** Foydalanuvchi qaytargan so'z: keyingi probelda qayta tuzatilmaydi. */
     private var suppressAutoFor: String? = null
     private var knownEpoch = 0
@@ -80,7 +83,10 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
     /** Tarjima qatori oxiridagi probelni klaviatura o'zi qo'ydi (tinishdan/taklifdan keyin). */
     private var trSoft = false
     private var trFromClip = false
-    private var trResult: String? = null
+    private var trUndo: TrUndo? = null
+
+    /** Matn belgilab ochilgan tarjima: natija belgilangan matn o'rniga yoziladi. */
+    private var trFromSel = false
     private var trStatus: String? = null
     private var trError = false
     private var trBusy = false
@@ -297,8 +303,9 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
             ""
         }
         if (sel.isNotBlank()) trBuf.append(sel)
+        trFromSel = sel.isNotBlank()
         trFromClip = false
-        trResult = null
+        trUndo = null
         trStatus = null
         trError = false
         r.showTranslate(this)
@@ -314,7 +321,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         trSeq++
         trBusy = false
         trBuf.setLength(0)
-        trResult = null
+        trUndo = null
         trStatus = null
         root?.hideTranslate()
         root?.keyboard?.enterStyle = enter
@@ -326,14 +333,14 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         if (!trMode) return
         val src = if (trFromClip) "Avto" else langs[langIdx].short
         root?.trBar?.render(
-            TrState(src, Translator.shortName(prefs.trTarget), trBuf.toString(), trBusy, trStatus, trError, trResult),
+            TrState(src, Translator.shortName(prefs.trTarget), trBuf.toString(), trBusy, trStatus, trError),
         )
     }
 
-    /** Tarjima qatoridagi matn o'zgardi: eski natija endi mos emas. */
+    /** Tarjima qatoridagi matn o'zgardi: eski holat xabari (va qaytariş) endi mos emas. */
     private fun trChanged() {
-        trResult = null
         if (!trBusy) {
+            trUndo = null
             trStatus = null
             trError = false
         }
@@ -394,9 +401,9 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         val key = Translator.keyFor(this, mode)
         if (key.isNullOrBlank()) {
             trStatus = if (mode == Translator.DEFAULT) {
-                "Bu yig'işda standart kalit yöq: sozlamalarda özingiznikini kiriting (bosing)"
+                "Standart kalit yöq: sozlamalarga (bosing)"
             } else {
-                "Avval Söz+ sozlamalarida tarjima kalitini kiriting (bosing)"
+                "Tarjima kaliti yöq: sozlamalarga (bosing)"
             }
             trError = true
             renderTranslate()
@@ -407,7 +414,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         val (source, payload) = Translator.prepareSource(text, langs[langIdx], trFromClip)
         trBusy = true
         trError = false
-        trResult = null
+        trUndo = null
         trStatus = "Tarjima qilinmoqda…"
         val seq = ++trSeq
         renderTranslate()
@@ -429,26 +436,112 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
                 if (seq != trSeq) return@post
                 trBusy = false
                 if (res != null) {
-                    trResult = res
-                    trStatus = null
-                    trError = false
+                    insertTranslation(res, text)
                 } else {
                     trStatus = err
                     trError = true
+                    renderTranslate()
                 }
-                renderTranslate()
             }
         }
+    }
+
+    /**
+     * Tayyor tarjima klaviatura içida emas, to'ğridan-to'ğri yozilayotgan maydonga yoziladi
+     * (belgilangan matn bo'lsa — uning o'rniga). Qatorda qisqa «qaytariş» xabari qoladi.
+     */
+    private fun insertTranslation(res: String, original: String) {
+        val ic = currentInputConnection
+        if (ic == null) {
+            // maydon yöq: natija yöqolmasin
+            try {
+                (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Tarjima", res))
+                trStatus = "Maydon yöq: tarjima nusxalandi"
+            } catch (t: Throwable) {
+                trStatus = "Maydon yöq, qöyib bölmadi"
+            }
+            trError = true
+            renderTranslate()
+            return
+        }
+        typedThisSession = true
+        lastAutoCorrect = null
+        spacing.reset()
+        ic.commitText(res, 1)
+        trUndo = TrUndo(res, original, trFromSel)
+        trFromSel = false
+        // yuborilgandan keyin yozilgan yangi matn saqlanadi
+        if (trBuf.toString().trim() == original) {
+            trBuf.setLength(0)
+            trSoft = false
+            trFromClip = false
+        }
+        trStatus = "✓ Qöyildi · qaytariş"
+        trError = false
+        trAutoCap()
+        renderTranslate()
+        refreshSuggestions()
+    }
+
+    /** Oxirgi qöyilgan tarjimani olib tashlab, asl matnni qaytaradi (kursor özgarmagan bölsa). */
+    private fun undoTranslation() {
+        val u = trUndo ?: return
+        val ic = currentInputConnection
+        val before = try {
+            ic?.getTextBeforeCursor(u.result.length, 0)?.toString()
+        } catch (t: Throwable) {
+            null
+        }
+        if (ic == null || before != u.result) {
+            trUndo = null
+            trStatus = "Qaytarib bölmadi: matn özgargan"
+            trError = true
+            renderTranslate()
+            return
+        }
+        ic.deleteSurroundingText(u.result.length, 0)
+        spacing.reset()
+        trUndo = null
+        if (u.fromSelection) {
+            ic.commitText(u.original, 1)
+            trStatus = "↩ Qaytarildi"
+        } else {
+            trBuf.setLength(0)
+            trBuf.append(u.original)
+            trSoft = false
+            trStatus = null
+        }
+        trError = false
+        trFromSel = false
+        trAutoCap()
+        renderTranslate()
+        refreshSuggestions()
     }
 
     override fun onTrClose() {
         closeTranslate()
     }
 
-    override fun onTrTarget(code: String) {
-        prefs.trTarget = code
-        trResult = null
-        renderTranslate()
+    override fun onTrLangs() {
+        root?.showTrLangs(
+            langs,
+            langIdx,
+            prefs.trTarget,
+            onSource = { i ->
+                root?.hideTrLangs()
+                if (i != langIdx) setLanguage(i) else renderTranslate()
+            },
+            onTarget = { code ->
+                prefs.trTarget = code
+                trUndo = null
+                if (!trBusy) {
+                    trStatus = null
+                    trError = false
+                }
+                root?.hideTrLangs()
+                renderTranslate()
+            },
+        )
     }
 
     /** Tillarni almashtiradi: maqsad tili klaviaturada bo'lsa, klaviatura shu tilga o'tadi. */
@@ -456,19 +549,18 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         val tgt = Lang.byId(prefs.trTarget)
         val i = if (tgt == null) -1 else langs.indexOf(tgt)
         if (i < 0) {
-            trStatus = "Bu til klaviaturada yöq: faqat maqsad tilini tanlang"
+            trStatus = "Bu til klaviaturada yöq: tilni tanlang"
             trError = false
             renderTranslate()
             return
         }
         prefs.trTarget = langs[langIdx].id
-        trResult?.let {
-            trBuf.setLength(0)
-            trBuf.append(it)
-            trSoft = false
-        }
-        trResult = null
+        trUndo = null
         trFromClip = false
+        if (!trBusy) {
+            trStatus = null
+            trError = false
+        }
         setLanguage(i)
     }
 
@@ -484,41 +576,24 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
         trBuf.append(text.take(Translator.MAX_CHARS))
         trSoft = false
         trFromClip = true
+        trFromSel = false
         trChanged()
     }
 
-    override fun onTrInsert() {
-        val res = trResult ?: return
-        val ic = currentInputConnection ?: return
-        typedThisSession = true
-        // belgilangan matndan boshlangan bo'lsa, commitText uning o'rniga qo'yadi
-        ic.commitText(res, 1)
-        trBuf.setLength(0)
-        trSoft = false
-        trResult = null
-        trFromClip = false
-        trStatus = "✓ Qöyildi"
-        trError = false
-        trAutoCap()
-        renderTranslate()
-        refreshSuggestions()
-    }
-
-    override fun onTrCopy() {
-        val res = trResult ?: return
-        try {
-            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Tarjima", res))
-            trStatus = "✓ Nusxalandi"
-            trError = false
-        } catch (t: Throwable) {
-            trStatus = "Nusxalab bölmadi"
-            trError = true
-        }
-        renderTranslate()
-    }
-
     override fun onTrStatusTap() {
-        if (trError && trStatus?.contains("kalit") == true) {
+        if (trUndo != null) {
+            undoTranslation()
+            return
+        }
+        if (trBusy) return
+        if (!(trError && trStatus?.contains("kalit") == true)) {
+            // oddiy xabar: yopiladi, yozilgan matn qaytib körinadi
+            trStatus = null
+            trError = false
+            renderTranslate()
+            return
+        }
+        run {
             try {
                 startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (t: Throwable) {
@@ -1353,7 +1428,7 @@ class AlifboIme : InputMethodService(), KeyboardListener, ClipboardHandler, Tran
 
     override fun onEnter() {
         if (trMode) {
-            if (trResult != null && trBuf.isNotEmpty()) onTrInsert() else onTrSend()
+            onTrSend()
             return
         }
         val info = currentInputEditorInfo ?: return

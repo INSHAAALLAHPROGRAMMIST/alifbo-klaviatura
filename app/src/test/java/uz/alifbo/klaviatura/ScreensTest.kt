@@ -127,11 +127,9 @@ class ScreensTest {
     private object NoTr : TranslateHandler {
         override fun onTrSend() {}
         override fun onTrClose() {}
-        override fun onTrTarget(code: String) {}
+        override fun onTrLangs() {}
         override fun onTrSwap() {}
         override fun onTrPasteClip() {}
-        override fun onTrInsert() {}
-        override fun onTrCopy() {}
         override fun onTrStatusTap() {}
     }
 
@@ -148,11 +146,21 @@ class ScreensTest {
     private fun tarjimaVaParollar() {
         val tr = root(Themes.light, Lang.UZ, suggestions = listOf("uçraşamizmi", "uçraşamiz", "uçraşuv"))
         tr.showTranslate(NoTr)
-        tr.trBar.render(TrState("UZ", "EN", "Ertaga soat beşda uçraşamizmi?", result = "Shall we meet tomorrow at five?"))
+        tr.trBar.render(TrState("UZ", "EN", "Ertaga soat beşda uçraşamizmi?"))
         save("tarjima_yorug", tr, screenW)
+        val trLangs = root(Themes.light, Lang.UZ, suggestions = emptyList())
+        trLangs.showTranslate(NoTr)
+        save("tarjima_tmp", trLangs, screenW)
+        trLangs.showTrLangs(Lang.entries, 0, "en", {}, {})
+        save("tarjima_tillar", trLangs, screenW)
+        File(outDir, "tarjima_tmp.png").delete()
+        val trDone = root(Themes.light, Lang.UZ, suggestions = emptyList())
+        trDone.showTranslate(NoTr)
+        trDone.trBar.render(TrState("UZ", "EN", "", status = "✓ Qöyildi · qaytariş"))
+        save("tarjima_tayyor", trDone, screenW)
         val trq = root(Themes.dark, Lang.UZ, suggestions = emptyList())
         trq.showTranslate(NoTr)
-        trq.trBar.render(TrState("UZ", "RU", "Salom, qalaysiz?", busy = true, status = "Tor orqali tarjima qilinmoqda…"))
+        trq.trBar.render(TrState("UZ", "RU", "Salom, qalaysiz?", busy = true, status = "Tarjima qilinmoqda…"))
         save("tarjima_qora", trq, screenW)
 
         val pw = root(Themes.light, Lang.UZ, suggestions = emptyList())

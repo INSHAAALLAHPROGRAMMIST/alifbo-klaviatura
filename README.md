@@ -12,7 +12,14 @@ telefonga «Söz» bilan yonma-yon örnatiladi va ikki narsa qöşadi:
 - **Tarjimon (to'ğridan-to'ğri, Tor'siz).** Qatordagi «A文» klaviatura içida tarjima qatorini oçadi:
   tugmalar ilovaga emas, şu qatorga yozadi; ➤ — tarjima va natija DARHOL yozilayotgan maydonga yoziladi
   (belgilangan matn bo'lsa — uning o'rniga), klaviatura içida natija çiqmaydi; qatorda qisqa «✓ Qöyildi ·
-  qaytariş» xabari qoladi (bosilsa — tarjima olib tashlanib asl matn qaytadi). 📋 — buferdagi matnni tarjima.
+  qaytariş» xabari qoladi (bosilsa — tarjima olib tashlanib asl matn qaytadi). 📋 — buferdagi matnni qatorga,
+  kursor joyiga qöyiş (maxfiy deb belgilangan nusxa tarjimaga qöyilmaydi). Qatordagi matn bosilsa kursor şu
+  joyga ötadi, surilsa matn aylanadi, bosib turib surilsa kursor barmoq ortidan yuradi.
+- **Töliq ekran muharriri.** Yozilayotgan matn uzun bölsa (ilova maydonida 60 belgidan yoki bir necha qator;
+  tarjimada 20 belgidan), asboblar qatorida ⤢ tugmasi çiqadi: butun matn katta oynada, kursor bilan
+  tahrirlanadi. «✓ Tayyor» (yoki «Orqaga») — saqlaydi: ilova maydonida faqat özgargan qism almaştiriladi;
+  «Bekor» — özgartirmaydi. Maydon orada özgargan bölsa ustidan yozilmaydi, matn buferga nusxalanadi.
+  Parol maydonlarida öçiq. (G'oya Telegram'dagi töliq ekran muharriridan.)
   Qator bir balandlikda (40 dp) qoladi: holat xabari matn o'rnida körinadi, yuqoridagi ilova ekrani
   torayib-kengaymaydi. Til tanlaş: [UZ ⇄ EN] bosilsa klaviatura o'rnida katta tugmali panel oçiladi
   (nima tilda yozasiz / qaysi tilga), ⇄ — tillarni almaştirişi. Sozlamalarda üç tanlov: «Standart» — ilovaga CI'da qotirilgan Google Cloud Translation kaliti

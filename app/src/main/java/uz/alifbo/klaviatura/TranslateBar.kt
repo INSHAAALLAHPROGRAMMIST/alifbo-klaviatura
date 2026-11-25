@@ -7,10 +7,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.TextUtils
-import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -27,6 +23,9 @@ interface TranslateHandler {
     fun onTrPasteClip()
     /** Qator içidagi holat xabari bosildi (qaytariş, sozlamalar yoki yopiş). */
     fun onTrStatusTap()
+
+    /** Qatordagi matnda kursor köçirildi. */
+    fun onTrCursor(position: Int)
 }
 
 /**
@@ -40,6 +39,7 @@ data class TrState(
     val busy: Boolean = false,
     val status: String? = null,
     val error: Boolean = false,
+    val cursor: Int = text.length,
 )
 
 /** Kichik belgili tugma (Canvas'da chiziladi). */
@@ -104,7 +104,8 @@ internal class IconButton(
 
 /**
  * Klaviatura ustidagi tarjima qatori: bitta ixcham qator, balandligi heç qaçon özgarmaydi.
- * [UZ ⇄ EN] [yozilayotgan matn yoki holat|] [📋] [➤] [✕]. Tillar bosilsa — til tanlash paneli.
+ * [UZ ⇄ EN] [yozilayotgan matn yoki holat|] [📋] [➤] [✕]. Tillar bosilsa — til tanlash paneli;
+ * matn bosilsa — kursor şu joyga ötadi, 📋 buferdagi matnni kursor joyiga qöyadi.
  */
 class TranslateBar(context: Context) : LinearLayout(context) {
     var trHandler: TranslateHandler? = null
@@ -115,7 +116,7 @@ class TranslateBar(context: Context) : LinearLayout(context) {
     private val source = TextView(context)
     private val swap = TextView(context)
     private val target = TextView(context)
-    private val input = TextView(context)
+    private val input = CursorTextView(context, singleLine = true)
     private val paste = IconButton(context, { c, p, x, y, s -> Icons.clipboard(c, p, x, y, s * 0.9f) }, { trHandler?.onTrPasteClip() })
     private val send = IconButton(context, { c, p, x, y, s -> Icons.enter(c, p, x, y, s, EnterStyle.SEND) }, { trHandler?.onTrSend() })
     private val close = TextView(context)
@@ -142,12 +143,9 @@ class TranslateBar(context: Context) : LinearLayout(context) {
         langBox.addView(target, LayoutParams(dpi(34f), LayoutParams.MATCH_PARENT))
         addView(langBox, LayoutParams(LayoutParams.WRAP_CONTENT, dpi(34f)))
 
-        input.textSize = 15f
-        input.isSingleLine = true
-        input.ellipsize = TextUtils.TruncateAt.START
-        input.gravity = Gravity.CENTER_VERTICAL
         input.setPadding(dpi(10f), 0, dpi(10f), 0)
-        input.setOnClickListener { if (state.status != null) trHandler?.onTrStatusTap() }
+        input.onCursor = { trHandler?.onTrCursor(it) }
+        input.onMessageTap = { trHandler?.onTrStatusTap() }
         addView(input, LayoutParams(0, dpi(34f), 1f).apply {
             marginStart = dpi(6f)
             marginEnd = dpi(2f)
@@ -194,36 +192,15 @@ class TranslateBar(context: Context) : LinearLayout(context) {
         close.setTextColor(t.hint)
 
         input.background = rounded(t.key, 10f)
-        val sb = SpannableStringBuilder()
-        val status = s.status
-        if (status != null) {
-            // holat matn o'rnida körinadi (qator balandligi özgarmaydi); yozilganda yoki bosilganda yo'qoladi
-            sb.append(status)
-            val c = if (s.error) 0xFFE5484D.toInt() else if (s.busy) t.hint else t.accent
-            sb.setSpan(ForegroundColorSpan(c), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            input.ellipsize = TextUtils.TruncateAt.END
-        } else if (s.text.isEmpty()) {
-            sb.append("│")
-            sb.setSpan(ForegroundColorSpan(t.accent), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            val start = sb.length
-            sb.append("Tarjima uçun yozing…")
-            sb.setSpan(ForegroundColorSpan(t.hint), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            input.ellipsize = TextUtils.TruncateAt.END
-        } else {
-            sb.append(s.text.replace(NEWLINE, ' '))
-            sb.setSpan(ForegroundColorSpan(t.text), 0, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            val start = sb.length
-            sb.append("│")
-            sb.setSpan(ForegroundColorSpan(t.accent), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            input.ellipsize = TextUtils.TruncateAt.START
-        }
-        input.text = sb
+        // holat matn örnida körinadi (qator balandligi özgarmaydi); yozilganda yoki bosilganda yo'qoladi
+        val color = if (s.error) 0xFFE5484D.toInt() else if (s.busy) t.hint else t.accent
+        input.setColors(t.text, t.hint, t.accent)
+        input.show(s.text, s.cursor, "Tarjima uçun yozing…", s.status, color)
         send.accent = s.text.isNotBlank() && !s.busy
     }
 
     companion object {
         /** Tarjima qatorining qat'iy balandligi (dp). */
         const val HEIGHT_DP = 40f
-        private const val NEWLINE = '\n'
     }
 }

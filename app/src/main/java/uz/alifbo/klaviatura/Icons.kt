@@ -125,6 +125,19 @@ object Icons {
         c.drawPath(place(clipboardTop, cx, cy, s), p)
     }
 
+    private val expandPath = Path().apply {
+        moveTo(0.2f, -0.75f); lineTo(0.75f, -0.75f); lineTo(0.75f, -0.2f)
+        moveTo(0.75f, -0.75f); lineTo(0.18f, -0.18f)
+        moveTo(-0.2f, 0.75f); lineTo(-0.75f, 0.75f); lineTo(-0.75f, 0.2f)
+        moveTo(-0.75f, 0.75f); lineTo(-0.18f, 0.18f)
+    }
+
+    /** Töliq ekranda oçiş belgisi: ikki tomonga oq. */
+    fun expand(c: Canvas, p: Paint, cx: Float, cy: Float, s: Float) {
+        stroke(p, s)
+        c.drawPath(place(expandPath, cx, cy, s), p)
+    }
+
     private val keyPath = Path().apply {
         addCircle(-0.48f, 0f, 0.36f, Path.Direction.CW)
         moveTo(-0.12f, 0f); lineTo(0.92f, 0f)

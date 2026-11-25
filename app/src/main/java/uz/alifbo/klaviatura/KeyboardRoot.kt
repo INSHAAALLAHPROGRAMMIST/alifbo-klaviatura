@@ -15,8 +15,10 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     val strip = StripView(context)
     val keyboard = KeyboardView(context)
     val overlay = OverlayView(context)
+    val editor = EditorPane(context)
 
     private val body = FrameLayout(context)
+    private var translateOn = false
     private var emoji: EmojiPanel? = null
     private var clipboard: ClipboardPanel? = null
     private var vault: VaultPanel? = null
@@ -35,6 +37,8 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
         onEmojiBack = { hideEmoji() }
 
         val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        editor.visibility = View.GONE
+        column.addView(editor, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0))
         trBar.visibility = View.GONE
         column.addView(trBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(strip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(STRIP_DP).toInt()))
@@ -50,6 +54,7 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
         theme = t
         setBackgroundColor(t.background)
         trBar.applyTheme(t)
+        editor.applyTheme(t)
         strip.theme = t
         keyboard.theme = t
         overlay.theme = t
@@ -64,7 +69,34 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     val isClipboardShown: Boolean get() = clipboard?.visibility == View.VISIBLE
     val isVaultShown: Boolean get() = vault?.visibility == View.VISIBLE
     val isTrLangsShown: Boolean get() = trLangs?.visibility == View.VISIBLE
-    val isTranslateShown: Boolean get() = trBar.visibility == View.VISIBLE
+    val isTranslateShown: Boolean get() = translateOn
+    val isEditorShown: Boolean get() = editor.visibility == View.VISIBLE
+
+    /** Muharrir balandligi (px) — ilova ekrani joyidan siljimasligi uçun xizmatga kerak. */
+    val editorHeight: Int get() = if (isEditorShown) editor.layoutParams.height else 0
+
+    /** Ekranning qolgan qismini egallaydigan muharrir; klaviatura va tahmin qatori joyida qoladi. */
+    fun showEditor(handler: EditorHandler) {
+        val screen = resources.displayMetrics.heightPixels
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        val statusBar = if (id > 0) resources.getDimensionPixelSize(id) else dp(24f).toInt()
+        val below = panelHeight() + dp(STRIP_DP).toInt()
+        // pastki tizim paneli uçun zaxira qoldiriladi
+        val h = (screen - statusBar - below - dp(EDITOR_RESERVE_DP).toInt()).coerceAtLeast(dp(EDITOR_MIN_DP).toInt())
+        editor.editorHandler = handler
+        editor.layoutParams = (editor.layoutParams as LinearLayout.LayoutParams).apply { height = h }
+        editor.applyTheme(theme)
+        editor.visibility = View.VISIBLE
+        trBar.visibility = View.GONE
+        strip.activeTool = 3
+    }
+
+    fun hideEditor() {
+        if (!isEditorShown) return
+        editor.visibility = View.GONE
+        trBar.visibility = if (translateOn) View.VISIBLE else View.GONE
+        strip.activeTool = if (translateOn) 1 else -1
+    }
 
     /** Panel klaviatura bilan bir xil balandlikda (boshqa panel ochiq bo'lsa — o'shaniki). */
     private fun panelHeight(): Int {
@@ -149,6 +181,7 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
 
     fun showTranslate(handler: TranslateHandler) {
         trBar.trHandler = handler
+        translateOn = true
         trBar.visibility = View.VISIBLE
         strip.activeTool = 1
     }
@@ -179,7 +212,9 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     }
 
     fun hideTranslate() {
+        hideEditor()
         hideTrLangs()
+        translateOn = false
         trBar.visibility = View.GONE
         if (strip.activeTool == 1) strip.activeTool = -1
     }
@@ -187,5 +222,7 @@ class KeyboardRoot(context: Context, listener: KeyboardListener) : FrameLayout(c
     companion object {
         /** Tahmin qatorining balandligi (dp). */
         const val STRIP_DP = 38f
+        private const val EDITOR_RESERVE_DP = 56f
+        private const val EDITOR_MIN_DP = 120f
     }
 }

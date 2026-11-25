@@ -131,6 +131,16 @@ class ScreensTest {
         override fun onTrSwap() {}
         override fun onTrPasteClip() {}
         override fun onTrStatusTap() {}
+        override fun onTrCursor(position: Int) {}
+    }
+
+    private object NoEditor : EditorHandler {
+        override fun onEditorDone() {}
+        override fun onEditorCancel() {}
+        override fun onEditorPaste() {}
+        override fun onEditorCopy() {}
+        override fun onEditorSend() {}
+        override fun onEditorCursor(position: Int) {}
     }
 
     private object NoVault : VaultHandler {
@@ -158,6 +168,24 @@ class ScreensTest {
         trDone.showTranslate(NoTr)
         trDone.trBar.render(TrState("UZ", "EN", "", status = "✓ Qöyildi · qaytariş"))
         save("tarjima_tayyor", trDone, screenW)
+        val long = "Assalomu alaykum! Ertaga soat beşda uçraşamizmi?\nMen hujjatlarni ham olib boraman, siz esa " +
+            "şartnomaning oxirgi nusxasini unutmang. Rahmat."
+        // matn örtasidagi kursor: qatorda ham, muharrirda ham körinişi kerak
+        val trMid = root(Themes.light, Lang.UZ, suggestions = emptyList())
+        trMid.showTranslate(NoTr)
+        trMid.strip.expandable = true
+        trMid.trBar.render(TrState("UZ", "EN", long, cursor = 30))
+        save("tarjima_kursor", trMid, screenW)
+        for ((name, t, translate) in listOf(Triple("yorug", Themes.light, false), Triple("qora", Themes.dark, true))) {
+            val r = root(t, Lang.UZ, suggestions = listOf("Rahmat", "Raqam", "Rasm"))
+            if (translate) r.showTranslate(NoTr)
+            r.strip.expandable = true
+            save("muharrir_tmp", r, screenW)
+            r.showEditor(NoEditor)
+            r.editor.render(EditorState(if (translate) "UZ → EN · 150/3000" else "Tahrirlaş · 150 belgi", long, 50, translate))
+            save("muharrir_$name", r, screenW)
+        }
+        File(outDir, "muharrir_tmp.png").delete()
         val trq = root(Themes.dark, Lang.UZ, suggestions = emptyList())
         trq.showTranslate(NoTr)
         trq.trBar.render(TrState("UZ", "RU", "Salom, qalaysiz?", busy = true, status = "Tarjima qilinmoqda…"))

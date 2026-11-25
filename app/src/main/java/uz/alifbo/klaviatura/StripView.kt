@@ -21,7 +21,8 @@ data class StripAction(val id: Int, val icon: Int, val text: String, val accent:
 
 /**
  * Klaviatura tepasidagi qator.
- * Chapda uch asbob: bufer, tarjima, parollar ([onTool]: 0 = bufer, 1 = tarjima, 2 = parollar).
+ * Chapda asboblar: bufer, tarjima, parollar ([onTool]: 0 = bufer, 1 = tarjima, 2 = parollar) va
+ * matnni töliq ekranda oçiş (3, faqat [expandable] bölganda).
  * O'ngda: tahmin — eng yaxshi taklif o'rtada (qalin), ikkinchisi chapda, uchinchisi o'ngda ([onPick]);
  * yozish boshlanmagan bo'lsa, oxirgi nusxa ([clipText], [onClip]); kirish maydonlarida — [actions].
  */
@@ -76,7 +77,17 @@ class StripView(context: Context) : View(context) {
             }
         }
 
-    /** Hozir ochiq asbob (0..2) — fon bilan ajratiladi; -1 = yo'q. */
+    /** Töliq ekran asbobi körinsinmi (yozilayotgan matn uzun yoki muharrir oçiq). */
+    var expandable: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                pressed = NONE
+                invalidate()
+            }
+        }
+
+    /** Hozir ochiq asbob (0..3) — fon bilan ajratiladi; -1 = yo'q. */
     var activeTool: Int = -1
         set(value) {
             if (field != value) {
@@ -96,13 +107,14 @@ class StripView(context: Context) : View(context) {
     private val rect = RectF()
 
     private val toolW: Float get() = dp(38f)
-    private val toolsEnd: Float get() = toolW * TOOLS + dp(4f)
+    private val tools: Int get() = if (expandable) TOOLS + 1 else TOOLS
+    private val toolsEnd: Float get() = toolW * tools + dp(4f)
 
     private fun shownActions(): List<StripAction> = actions.take(2)
 
     private fun targetAt(x: Float): Int {
         if (width <= 0) return NONE
-        if (x < toolsEnd) return TOOL_BASE + (x / toolW).toInt().coerceIn(0, TOOLS - 1)
+        if (x < toolsEnd) return TOOL_BASE + (x / toolW).toInt().coerceIn(0, tools - 1)
         val acts = shownActions()
         if (acts.isNotEmpty()) {
             val w = (width - toolsEnd) / acts.size
@@ -166,7 +178,7 @@ class StripView(context: Context) : View(context) {
 
     private fun drawTools(canvas: Canvas) {
         val cy = height / 2f
-        for (t in 0 until TOOLS) {
+        for (t in 0 until tools) {
             val cx = toolW * t + toolW / 2f + dp(2f)
             if (pressed == TOOL_BASE + t || activeTool == t) {
                 rect.set(cx - dp(16f), dp(4f), cx + dp(16f), height - dp(4f))
@@ -186,7 +198,8 @@ class StripView(context: Context) : View(context) {
                     text.textSize = dp(11f)
                     canvas.drawText("文", cx + dp(5f), cy + dp(9f), text)
                 }
-                else -> Icons.key(canvas, icon, cx, cy, dp(20f))
+                2 -> Icons.key(canvas, icon, cx, cy, dp(20f))
+                else -> Icons.expand(canvas, icon, cx, cy, dp(18f))
             }
         }
         line.color = theme.hint
